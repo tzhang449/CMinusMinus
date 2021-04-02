@@ -78,7 +78,7 @@ ExtDef : Specifier ExtDecList SEMI {
         insert($$,$2);
         insert($$,$3);
     }
-    | Specifier error{
+    | Specifier error SEMI{
         yyerrok;
     }
     | error SEMI {
@@ -94,6 +94,9 @@ ExtDecList : VarDec {
         insert($$,$1);
         insert($$,$2);
         insert($$,$3);
+    }
+    | error ExtDecList{
+        yyerrok;
     };
 
 /* Specifiers */
@@ -118,6 +121,9 @@ StructSpecifier : STRUCT OptTag LC DefList RC {
         $$=newNode("StructSpecifier",ISOTHER,@$.first_line);
         insert($$,$1);
         insert($$,$2);
+    }
+    | error RC{
+        yyerrok;
     };
 
 OptTag : ID {
@@ -144,6 +150,9 @@ VarDec : ID {
         insert($$,$2); 
         insert($$,$3);
         insert($$,$4);  
+    }
+    | error RB{
+        yyerrok;
     };
 
 FunDec : ID LP VarList RP {
@@ -172,12 +181,18 @@ VarList : ParamDec COMMA VarList {
     | ParamDec {
         $$=newNode("VarList",ISOTHER,@$.first_line);
         insert($$,$1); 
+    }
+    | error VarList{
+        yyerrok;
     };
 
 ParamDec : Specifier VarDec {
         $$=newNode("ParamDec",ISOTHER,@$.first_line);
         insert($$,$1); 
         insert($$,$2); 
+    }
+    | error VarDec{
+        yyerrok;
     };
 
 /* Statements */
@@ -242,6 +257,9 @@ Stmt : Exp SEMI {
         insert($$,$4);
         insert($$,$5); 
     }
+    | IF LP error RP Stmt {
+        yyerrok;
+    }
     | error SEMI {
         yyerrok;
     };
@@ -275,6 +293,9 @@ DecList : Dec {
         insert($$,$1);
         insert($$,$2);
         insert($$,$3);
+    }
+    | error DecList{
+        yyerrok;
     };
 
 Dec : VarDec {
