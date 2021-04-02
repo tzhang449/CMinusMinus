@@ -1,7 +1,12 @@
-#include <stdio.h>
+#include "stdio.h"
+
+#include "ast.h"
 
 extern int yyrestart();
 extern int yyparse();
+
+struct ASTNode* root=NULL;
+int hasError=0;
 
 int main(int argc, char **argv)
 {
@@ -13,7 +18,12 @@ int main(int argc, char **argv)
         perror(argv[1]);
         return 1;
     }
+
     yyrestart(f);
     yyparse();
+    
+    if(!hasError)
+        printNode(root);
+
     return 0;
 }
