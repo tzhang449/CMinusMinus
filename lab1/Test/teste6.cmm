@@ -1,0 +1,10 @@
+int main()
+{   
+    /*
+    comment
+    /*
+    nested
+    */
+    */
+    int i=1;
+}
