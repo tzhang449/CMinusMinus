@@ -6,9 +6,9 @@
     extern int hasError;
     int previousErrLine=0;
 
-    int yyerror(char*);
+    int yyerror(const char*);
 %}
-
+%error-verbose
 /* declared types */
 %union{
     struct ASTNode *Node;
@@ -39,6 +39,7 @@
 %left PLUS MINUS
 %left STAR DIV
 %right NOT
+%precedence NEG 
 %left LP RP LB RB DOT
 
 %%
@@ -55,6 +56,9 @@ ExtDefList : ExtDef ExtDefList {
     }
     | /*empty*/ {
         $$=NULL;
+    }
+    | error ExtDefList {
+        yyerrok;
     };
 
 ExtDef : Specifier ExtDecList SEMI {
@@ -74,8 +78,11 @@ ExtDef : Specifier ExtDecList SEMI {
         insert($$,$2);
         insert($$,$3);
     }
+    | Specifier error{
+        yyerrok;
+    }
     | error SEMI {
-        yyerror("ExtDef error");
+        yyerrok;
     };
 
 ExtDecList : VarDec {
@@ -111,9 +118,6 @@ StructSpecifier : STRUCT OptTag LC DefList RC {
         $$=newNode("StructSpecifier",ISOTHER,@$.first_line);
         insert($$,$1);
         insert($$,$2);
-    }
-    | error RC {
-        yyerror("StructSpecifier error");
     };
 
 OptTag : ID {
@@ -156,7 +160,7 @@ FunDec : ID LP VarList RP {
         insert($$,$3); 
     }
     | error RP {
-        yyerror("FunDec error");
+        yyerrok;
     };
 
 VarList : ParamDec COMMA VarList {
@@ -185,7 +189,7 @@ CompSt : LC DefList StmtList RC {
         insert($$,$4);  
     }
     | error RC {
-        yyerror("CompSt error");
+        yyerrok;
     };
 
 StmtList : Stmt StmtList {
@@ -239,7 +243,7 @@ Stmt : Exp SEMI {
         insert($$,$5); 
     }
     | error SEMI {
-        yyerror("Stmt error");
+        yyerrok;
     };
 
 /* Local Definitions */
@@ -257,9 +261,9 @@ Def : Specifier DecList SEMI {
         insert($$,$1); 
         insert($$,$2); 
         insert($$,$3);
-    };
+    }
     | error SEMI {
-        yyerror("Def error");
+        yyerrok;
     };
 
 DecList : Dec {
@@ -339,7 +343,7 @@ Exp : Exp ASSIGNOP Exp {
         insert($$,$2);
         insert($$,$3);
     }
-    | MINUS Exp {
+    | MINUS Exp %prec NEG{
         $$=newNode("Exp",ISOTHER,@$.first_line);
         insert($$,$1);
         insert($$,$2);
@@ -386,8 +390,7 @@ Exp : Exp ASSIGNOP Exp {
     | FLOAT {
         $$=newNode("Exp",ISOTHER,@$.first_line);
         insert($$,$1);
-    }
-    | error RP {yyerror("Exp error");};
+    };
 
 Args : Exp COMMA Args {
         $$=newNode("Args",ISOTHER,@$.first_line);
@@ -395,12 +398,12 @@ Args : Exp COMMA Args {
         insert($$,$2);
         insert($$,$3);
     }
-    | Exp {};    
+    | Exp {$$=newNode("Args",ISOTHER,@$.first_line);
+        insert($$,$1);};
 %%
-int yyerror(char *msg){
+int yyerror(const char *msg){
     hasError++;
     if(previousErrLine !=yylloc.first_line){
-        
         fprintf(stderr, "Error type B at Line %d: %s.\n",yylloc.first_line,msg);
         previousErrLine=yylloc.first_line;
     }
