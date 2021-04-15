@@ -1,5 +1,5 @@
 # CMinusMinus
-CMinusMinus is a compiler project making a compiler which parses a simple C-style language into MIPS Machine code. This project is to learn the basic concepts of a compiler. The formal CFG of the languange can be seen in the __*files*__ folder.
+CMinusMinus is a compiler project which makes a compiler to parse a simple C-style language into MIPS machine code. This project is to learn the basic concepts of a compiler. The formal CFG of the languange can be seen in the __*files*__ folder.
 
 This project is in progess.
 
