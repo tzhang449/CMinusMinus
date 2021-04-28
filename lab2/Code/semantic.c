@@ -4,14 +4,15 @@
 
 #include "semantic.h"
 
-Sym sym_int, sym_float;
-
 extern SymTable global;
 extern int hasError;
 
+Sym sym_int, sym_float;
+char tmpStr[100];
+
 void semanticError(int errType, int lineno, char *msg)
 {
-    printf("Error type %d at Line %d: %s\n", errType, lineno, msg);
+    printf("Error type %d at Line %d: %s.\n", errType, lineno, msg);
 }
 
 Type makeType()
@@ -74,10 +75,19 @@ SymTable makeSymTable()
 
 void symTable_addSym(Sym sym)
 {
-    //to do
+    if (!global->head)
+    {
+        global->head = sym;
+        return;
+    }
+
+    Sym cur = global->head;
+    while (cur->next)
+        cur = cur->next;
+    cur->next = sym;
 }
 
-int symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
+Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
 {
     Sym cur = table->head;
     while (cur)
@@ -85,11 +95,27 @@ int symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
         if ((cur->kind == RD_TYPE || cur->kind == RD_VARIABLE) && (kind == RD_TYPE || kind == RD_VARIABLE))
         {
             if (strcmp(cur->name, name) == 0)
-                return 1;
+                return cur;
         }
         cur = cur->next;
     }
-    return 0;
+    return NULL;
+}
+
+Sym symTable_find(char *name, enum SYM_ENUM kind)
+{
+    SymTable cur = global;
+    Sym ret = NULL;
+    while (cur)
+    {
+        ret = symTable_tableFind(cur, name, kind);
+        if (ret)
+        {
+            return ret;
+        }
+        cur = cur->pre;
+    }
+    return ret;
 }
 
 int symTable_checkDuplicate(char *name, enum SYM_ENUM kind)
@@ -173,11 +199,9 @@ int nameAnalysis(struct ASTNode *root, void *args)
         {
         case RD_INT:
             *(Sym *)args = sym_int;
-            ret = 0;
             break;
         case RD_FLOAT:
             *(Sym *)args = sym_float;
-            ret = 0;
             break;
         default:
             //should not reach here
@@ -188,6 +212,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
         break;
 
     case SM_Specifiers_S:
+        ret = nameAnalysis(root->children[0], args);
+        break;
+
+    case SM_StructSpecifier_SOLDR:
         //production: StructSpecifier -> STRUCT OptTag LC DefList RC
         {
             Sym cur = NULL;
@@ -203,9 +231,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 int err = symTable_checkDuplicate(name, RD_TYPE);
                 if (err)
                 {
-                    char str[100];
-                    sprintf(str, "Duplicated name \"%s\"", name);
-                    semanticError(16, root->children[1]->lineno, str);
+                    sprintf(tmpStr, "Duplicated name \"%s\"", name);
+                    semanticError(16, root->children[1]->lineno, tmpStr);
                     *(Sym *)args = NULL;
                     return 1;
                 }
@@ -213,7 +240,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
             }
             cur->u.type->kind = RD_STRUCTURE;
-            ret = nameAnalysis(root->children[3], (void *)&cur);
+            nameAnalysis(root->children[3], (void *)&cur);
             if (!ret)
             {
                 *(Sym *)args = cur;
@@ -226,11 +253,30 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         break;
 
+    case SM_StructSpecifier_ST:
+        char *name = root->children[1]->children[0]->str_val;
+        Sym cur = symTable_find(name, RD_TYPE);
+        if (!cur)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Undefined structure \"%s\"", name);
+            semanticError(17, root->children[1]->lineno, tmpStr);
+        }
+        else
+        {
+            *(Sym *)args = cur;
+        }
+        break;
+
+
+
         //To do
 
     default:
-        printf("name Analysis : AST node error type!\n");
+        printf("name Analysis : unimplemented error!\n");
+        ret = 1;
         break;
     }
+
     return ret;
 }
