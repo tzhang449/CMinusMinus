@@ -1,6 +1,8 @@
 #include "stdio.h"
+#include "stdlib.h"
 
 #include "ast.h"
+#include "semantic.h"
 
 extern int yyrestart();
 extern int yyparse();
@@ -24,7 +26,11 @@ int main(int argc, char **argv)
     
     if(hasError)
         return 0;
-     
+    
+    hasError=0;
+    SymTable* globalSymTable=(SymTable*)malloc(sizeof(struct SymTable_));
+    nameAnalysis(root);
+
 
     return 0;
 }
