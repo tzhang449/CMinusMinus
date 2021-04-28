@@ -28,9 +28,11 @@ int main(int argc, char **argv)
     
     if(hasError)
         return 0;
-    
-    hasError=0;
-    nameAnalysis(root,NULL);
+
+    if(nameAnalysis(root,NULL)){
+        //error
+        return 0;
+    }
 
 
     return 0;

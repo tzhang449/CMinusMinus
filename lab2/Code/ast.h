@@ -64,6 +64,11 @@ enum NodeType
     SM_OTHERTERM
 };
 
+enum BASIC_ENUM {
+    RD_INT,
+    RD_FLOAT
+};
+
 struct ASTNode
 {
     enum NodeType type;
@@ -76,7 +81,7 @@ struct ASTNode
     union{
         int int_val;
         float float_val;
-        enum TYPE_ENUM {RD_INT,RD_FLOAT} type_val;
+        enum BASIC_ENUM type_val;
     };
     char str_val[32];
 };

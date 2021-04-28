@@ -8,14 +8,17 @@ typedef struct FuncType_* FuncType;
 typedef struct Sym_* Sym;
 typedef struct SymTable_* SymTable;
 
+enum TYPE_ENUM{
+    RD_BASIC, 
+    RD_ARRAY, 
+    RD_STRUCTURE
+}; 
+
 struct Type_{
-    enum type_type{
-        RD_BASIC, 
-        RD_ARRAY, 
-        RD_STRUCTURE} kind;
+    enum TYPE_ENUM kind;
     union{
         // basic type
-        enum TYPE_ENUM basic;
+        enum BASIC_ENUM basic;
         // for array type
         struct{
             Type elem;
@@ -38,12 +41,16 @@ struct FuncType_{
     Sym* param_type_sym;
 };
 
+enum SYM_ENUM {
+    RD_TYPE,
+    RD_VARIABLE,
+    RD_FUNC
+};
+
 struct Sym_{
-    enum sym_type {
-        RD_TYPE,
-        RD_VARIABLE,
-        RD_FUNC
-    } kind;
+    char* name;
+
+    enum SYM_ENUM kind;
 
     union{
         //TYPE
@@ -76,5 +83,5 @@ Sym makeSym(enum sym_type kind);
 SymTable makeSymTable();
 */
 
-void nameAnalysis(struct ASTNode* root,void* args);
+int nameAnalysis(struct ASTNode* root,void* args);
 #endif
