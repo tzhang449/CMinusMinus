@@ -9,9 +9,18 @@ extern int hasError;
 
 Sym sym_int, sym_float;
 char tmpStr[100];
+int indent=0;
+
+
+void printIdent(){
+    for(int i=0;i<indent;i++){
+        printf(" ");
+    }
+}
 
 void semanticError(int errType, int lineno, char *msg)
 {
+
     printf("Error type %d at Line %d: %s.\n", errType, lineno, msg);
 }
 
@@ -36,6 +45,7 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
     Sym ret = (Sym)malloc(sizeof(struct Sym_));
     if (name)
     {
+        ret->name=(char*)malloc(strlen(name));
         strcpy(ret->name, name);
     }
     else
@@ -135,8 +145,14 @@ int symTable_checkDuplicate(char *name, enum SYM_ENUM kind)
 // on success, 0 is returned. Otherwise, 1 is returned.
 int nameAnalysis(struct ASTNode *root, void *args)
 {
+    indent+=2;
+    printIdent();
+    printf("##%s##\n",root->name);
     if (root == NULL)
     {
+        printIdent();
+        printf("!%s!\n",root->name);
+        indent-=2;
         return 0;
     }
     int ret = 0;
@@ -155,7 +171,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     case SM_ExtDefList:
         ret = nameAnalysis(root->children[0], NULL);
-        ret = ret || nameAnalysis(root->children[1], NULL);
+        ret = nameAnalysis(root->children[1], NULL) || ret;
         break;
 
     case SM_ExtDef_SES:
@@ -191,7 +207,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_ExtDecList_VCE:
         ret = nameAnalysis(root->children[0], args);
         //child 1 is comma, skip it
-        ret = ret || nameAnalysis(root->children[2], args);
+        ret = nameAnalysis(root->children[2], args) || ret;
         break;
 
     case SM_Specifiers_T:
@@ -233,7 +249,9 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 {
                     sprintf(tmpStr, "Duplicated name \"%s\"", name);
                     semanticError(16, root->children[1]->lineno, tmpStr);
-                    *(Sym *)args = NULL;
+                    printIdent();
+                    printf("!%s!\n",root->name);
+                    indent-=2;
                     return 1;
                 }
 
@@ -243,17 +261,15 @@ int nameAnalysis(struct ASTNode *root, void *args)
             nameAnalysis(root->children[3], (void *)&cur);
             if (!ret)
             {
-                *(Sym *)args = cur;
+                if(args!=NULL)
+                    *(Sym *)args = cur;
                 symTable_addSym(cur);
-            }
-            else
-            {
-                *(Sym *)args = NULL;
             }
         }
         break;
 
     case SM_StructSpecifier_ST:
+    {
         char *name = root->children[1]->children[0]->str_val;
         Sym cur = symTable_find(name, RD_TYPE);
         if (!cur)
@@ -266,9 +282,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
         {
             *(Sym *)args = cur;
         }
-        break;
-
-
+    }
+    break;
 
         //To do
 
@@ -277,6 +292,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
         ret = 1;
         break;
     }
-
+    printIdent();
+    printf("!%s!\n",root->name);
+    indent-=2;
     return ret;
 }

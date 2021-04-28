@@ -1,0 +1,14 @@
+struct a{
+    int b;
+} b;
+
+
+struct fuck c;
+
+struct a{
+    int b;
+};
+
+int main(){
+    
+}
