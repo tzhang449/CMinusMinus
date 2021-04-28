@@ -1,5 +1,4 @@
 #include "stdio.h"
-#include "stdlib.h"
 
 #include "ast.h"
 #include "semantic.h"
@@ -8,7 +7,10 @@ extern int yyrestart();
 extern int yyparse();
 
 struct ASTNode* root=NULL;
+SymTable* global=NULL;
+
 int hasError=0;
+
 
 int main(int argc, char **argv)
 {
@@ -28,8 +30,7 @@ int main(int argc, char **argv)
         return 0;
     
     hasError=0;
-    SymTable* globalSymTable=(SymTable*)malloc(sizeof(struct SymTable_));
-    nameAnalysis(root);
+    nameAnalysis(root,NULL);
 
 
     return 0;

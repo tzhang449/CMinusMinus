@@ -1,24 +1,7 @@
 #ifndef _AST_H_
 #define _AST_H_
 
-struct ASTNode
-{
-    int type;
-    char name[32];
-    int lineno;
-
-    int numKids;
-    struct ASTNode *children[10];
-
-    union{
-        int int_val;
-        float float_val;
-        int type_val;
-    };
-    char str_val[32];
-};
-
-enum
+enum NodeType
 {
     SM_Program,
     SM_ExtDefList,
@@ -79,6 +62,23 @@ enum
     SM_TYPE,
     SM_ID,
     SM_OTHERTERM
+};
+
+struct ASTNode
+{
+    enum NodeType type;
+    char name[32];
+    int lineno;
+
+    int numKids;
+    struct ASTNode *children[10];
+
+    union{
+        int int_val;
+        float float_val;
+        enum TYPE_ENUM {RD_INT,RD_FLOAT} type_val;
+    };
+    char str_val[32];
 };
 
 

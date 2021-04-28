@@ -143,9 +143,9 @@ WHILE while
 {TYPE} {
     yylval.Node=newNode("TYPE",SM_TYPE,yylineno);
     if (strcmp(yytext,"int")==0){
-        yylval.Node->type_val=0;
+        yylval.Node->type_val=RD_INT;
     }else{
-        yylval.Node->type_val=1;
+        yylval.Node->type_val=RD_FLOAT;
     }
     return TYPE;
 }
