@@ -57,91 +57,91 @@ WHILE while
 
 %%
 {OCTINT} {
-    yylval.Node=newNode("INT",ISINT,yylineno);
+    yylval.Node=newNode("INT",SM_INT,yylineno);
     sscanf(yytext,"%o",&yylval.Node->int_val);
     return INT;
 }
 
 {DECINT} {
-    yylval.Node=newNode("INT",ISINT,yylineno);
+    yylval.Node=newNode("INT",SM_INT,yylineno);
     sscanf(yytext,"%d",&yylval.Node->int_val);
     return INT;
 }
 
 {HEXINT} {
-    yylval.Node=newNode("INT",ISINT,yylineno);
+    yylval.Node=newNode("INT",SM_INT,yylineno);
     sscanf(yytext,"%x",&yylval.Node->int_val);
     return INT;
 }
 
 {FLOAT} {
-    yylval.Node=newNode("FLOAT",ISFLOAT,yylineno);
+    yylval.Node=newNode("FLOAT",SM_FLOAT,yylineno);
     sscanf(yytext,"%f",&yylval.Node->float_val);
     return FLOAT;
 }
 
 {SEMI} {
-    yylval.Node=newNode("SEMI",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("SEMI",SM_OTHERTERM,yylineno);
     return SEMI;
 }
 
 {COMMA} {
-    yylval.Node=newNode("COMMA",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("COMMA",SM_OTHERTERM,yylineno);
     return COMMA;
 }
 
 {ASSIGNOP} {
-    yylval.Node=newNode("ASSIGNOP",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("ASSIGNOP",SM_OTHERTERM,yylineno);
     return ASSIGNOP;
 }
 
 {RELOP} {
-    yylval.Node=newNode("RELOP",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("RELOP",SM_OTHERTERM,yylineno);
     return RELOP;
 }
 
 {PLUS} {
-    yylval.Node=newNode("PLUS",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("PLUS",SM_OTHERTERM,yylineno);
     return PLUS;
 }
 
 {MINUS} {
-    yylval.Node=newNode("MINUS",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("MINUS",SM_OTHERTERM,yylineno);
     return MINUS;
 }
 
 {STAR} {
-    yylval.Node=newNode("STAR",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("STAR",SM_OTHERTERM,yylineno);
     return STAR;
 }
 
 {DIV} {
-    yylval.Node=newNode("DIV",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("DIV",SM_OTHERTERM,yylineno);
     return DIV;
 }
 
 {AND} {
-    yylval.Node=newNode("AND",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("AND",SM_OTHERTERM,yylineno);
     return AND;
 }
 
 {OR} {
-    yylval.Node=newNode("OR",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("OR",SM_OTHERTERM,yylineno);
     return OR;
 }
 
 {DOT} {
-    yylval.Node=newNode("DOT",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("DOT",SM_OTHERTERM,yylineno);
     return DOT;
 }
 
 {NOT} {
-    yylval.Node=newNode("NOT",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("NOT",SM_OTHERTERM,yylineno);
     return NOT;
 }
 
 {TYPE} {
-    yylval.Node=newNode("TYPE",ISTYPE,yylineno);
+    yylval.Node=newNode("TYPE",SM_TYPE,yylineno);
     if (strcmp(yytext,"int")==0){
         yylval.Node->type_val=0;
     }else{
@@ -151,63 +151,63 @@ WHILE while
 }
 
 {LP} {
-    yylval.Node=newNode("LP",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("LP",SM_OTHERTERM,yylineno);
     return LP;
 }
 
 {RP} {
-    yylval.Node=newNode("RP",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("RP",SM_OTHERTERM,yylineno);
     return RP;
 }
 
 {LB} {
-    yylval.Node=newNode("LB",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("LB",SM_OTHERTERM,yylineno);
     return LB;
 }
 
 {RB} {
-    yylval.Node=newNode("RB",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("RB",SM_OTHERTERM,yylineno);
     return RB;
 }
 
 {LC} {
-    yylval.Node=newNode("LC",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("LC",SM_OTHERTERM,yylineno);
     return LC;
 }
 
 {RC} {
-    yylval.Node=newNode("RC",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("RC",SM_OTHERTERM,yylineno);
     return RC;
 }
 
 {STRUCT} {
-    yylval.Node=newNode("STRUCT",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("STRUCT",SM_OTHERTERM,yylineno);
     return STRUCT;
 }
 
 {RETURN} {
-    yylval.Node=newNode("RETURN",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("RETURN",SM_OTHERTERM,yylineno);
     return RETURN;
 }
 
 {IF} {
-    yylval.Node=newNode("IF",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("IF",SM_OTHERTERM,yylineno);
     return IF;
 }
 
 {ELSE} {
-    yylval.Node=newNode("ELSE",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("ELSE",SM_OTHERTERM,yylineno);
     return ELSE;
 }
 
 
 {WHILE} {
-    yylval.Node=newNode("WHILE",ISOTHERTERM,yylineno);
+    yylval.Node=newNode("WHILE",SM_OTHERTERM,yylineno);
     return WHILE;
 }
 
 {ID} {
-    yylval.Node=newNode("ID",ISID,yylineno);
+    yylval.Node=newNode("ID",SM_ID,yylineno);
     strcpy(yylval.Node->str_val,yytext);
     return ID;
 }

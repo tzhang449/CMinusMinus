@@ -22,8 +22,9 @@ int main(int argc, char **argv)
     yyrestart(f);
     yyparse();
     
-    if(!hasError)
-        printNode(root);
+    if(hasError)
+        return 0;
+     
 
     return 0;
 }
