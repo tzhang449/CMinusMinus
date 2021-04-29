@@ -38,11 +38,12 @@ void fillBasicType(Type type, enum TYPE_ENUM basic)
     type->u.basic = basic;
 }
 
-FuncParam makeFuncParam(Sym sym){
-    FuncParam ret=(FuncParam)malloc(sizeof(struct FuncParam_));
-    ret->next=NULL;
-    ret->type=sym->u.type_sym;
-    ret->param=sym;
+FuncParam makeFuncParam(Sym sym)
+{
+    FuncParam ret = (FuncParam)malloc(sizeof(struct FuncParam_));
+    ret->next = NULL;
+    ret->type = sym->u.type_sym;
+    ret->param = sym;
 }
 
 FuncType makeFuncType()
@@ -116,6 +117,13 @@ void symTable_addSymTable()
     global->next = newST;
     newST->pre = global;
     global = newST;
+}
+
+//We need RAII or GC! Memory leak here.
+void symTable_removeTable()
+{
+    global = global->pre;
+    global->next = NULL;
 }
 
 Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
@@ -233,6 +241,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         ret = nameAnalysis(root->children[0], (void *)&specifier);
         ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
         ret = nameAnalysis(root->children[2], NULL) || ret;
+        symTable_removeTable();
     }
     break;
 
@@ -405,38 +414,45 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     case SM_VarList_PCV:
     {
-        ret=nameAnalysis(root->children[0],args);
-        ret=nameAnalysis(root->children[2],args) || ret;
+        ret = nameAnalysis(root->children[0], args);
+        ret = nameAnalysis(root->children[2], args) || ret;
     }
     break;
 
-    case SM_VarList_P:{
-        ret=nameAnalysis(root->children[0],args);
+    case SM_VarList_P:
+    {
+        ret = nameAnalysis(root->children[0], args);
     }
     break;
 
-    case SM_ParamDec:{
-        Sym func_sym=(Sym)args;
+    case SM_ParamDec:
+    {
+        Sym func_sym = (Sym)args;
         //we need sym of the specifier
         Sym specifier = NULL;
         ret = nameAnalysis(root->children[0], (void *)&specifier);
         ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
-        if(!ret){
-            FuncType func_type=func_sym->u.func_type;
+        if (!ret)
+        {
+            FuncType func_type = func_sym->u.func_type;
             func_type->n_param++;
-            
-            FuncParam param=makeFuncParam(global_cur_sym);
-            if(!func_type->head){
-                func_type->head=param;
-            }else{
-                FuncParam cur=func_type->head;
-                while(cur->next)
-                    cur=cur->next;
-                cur->next=param;
+
+            FuncParam param = makeFuncParam(global_cur_sym);
+            if (!func_type->head)
+            {
+                func_type->head = param;
+            }
+            else
+            {
+                FuncParam cur = func_type->head;
+                while (cur->next)
+                    cur = cur->next;
+                cur->next = param;
             }
         }
     }
     break;
+
         //To do
 
     default:
