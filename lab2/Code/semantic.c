@@ -149,18 +149,25 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
 }
 
 int typeSym_IsInt(Sym sym){
+    if(!sym)
+        return 0;
     return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC && sym->u.type->u.basic==RD_INT;
 }
 
 int typeSym_IsBasic(Sym sym){
+    if(!sym)
+        return 0;
     return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC;
 }
 
 int typeSym_IsStruct(Sym sym){
+    if(!sym)
+        return 0;
     return sym->kind==RD_TYPE && sym->u.type->kind==RD_STRUCTURE;
 }
 
 int typeSym_IsSame(Sym left_sym,Sym right_sym){
+    printf("left:%d right:%d\n",left_sym->kind,right_sym->kind);
     if(!left_sym || !right_sym)
         return 0;
     if(left_sym->kind!=RD_TYPE || right_sym->kind!=RD_TYPE)
@@ -308,7 +315,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         fillBasicType(sym_int->u.type, RD_INT);
 
         sym_float = makeSym(RD_TYPE, "float");
-        fillBasicType(sym_int->u.type, RD_FLOAT);
+        fillBasicType(sym_float->u.type, RD_FLOAT);
 
         global = makeSymTable();
         ret = nameAnalysis(root->children[0], NULL);
@@ -389,6 +396,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_StructSpecifier_SOLDR:
     {
         Sym cur = NULL;
+        int duplicated_name = 0;
         if (root->children[1] == NULL)
         {
             //anonymous struct, skip the duplicate check
@@ -402,6 +410,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             {
                 sprintf(tmpStr, "Duplicated name \"%s\"", name);
                 semanticError(16, root->children[1]->lineno, tmpStr);
+                duplicated_name = 1;
                 ret = 1;
             }
             cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
@@ -418,7 +427,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         symTable_removeTable();
         if (args != NULL)
             *(Sym *)args = cur;
-        if (!ret)
+        if(!duplicated_name)
             symTable_addSym(cur);
     }
     break;
@@ -449,12 +458,14 @@ int nameAnalysis(struct ASTNode *root, void *args)
             if (!isInStruct)
             {
                 sprintf(tmpStr, "Redefined variable \"%s\"", name);
+                semanticError(3, root->children[0]->lineno, tmpStr);
             }
             else
             {
                 sprintf(tmpStr, "Redefined field \"%s\"", name);
+                semanticError(15, root->children[0]->lineno, tmpStr);
             }
-            semanticError(3, root->children[0]->lineno, tmpStr);
+
             ret = 1;
             break;
         }
@@ -521,7 +532,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         Sym cur = makeSym(RD_FUNC, name);
         cur->u.func_type->return_type = (Sym)args;
         symTable_addSym(cur);
-
+        global_curFunc_sym = cur;
         symTable_addSymTable();
     }
     break;
@@ -610,7 +621,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Stmt_ILERS:
     {
         ret = nameAnalysis(root->children[2], NULL);
-        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        if (!global_curExp_typeSym || global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
         {
             ret = 1;
             sprintf(tmpStr, "Exp type mismatched for if, should be INT");
@@ -825,7 +836,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             if (err11)
             {
                 sprintf(tmpStr, "\"%s\" is not a function", name);
-                semanticError(2, root->children[0]->lineno, tmpStr);
+                semanticError(11, root->children[0]->lineno, tmpStr);
             }
             else
             {
@@ -956,7 +967,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        global_curExp_typeSym = vari_sym->u.type_sym;
+        if(vari_sym->kind==RD_VARIABLE)
+            global_curExp_typeSym = vari_sym->u.type_sym;
+        if(vari_sym->kind==RD_ARRAY)
+            global_curExp_typeSym = vari_sym;
     }
     break;
 

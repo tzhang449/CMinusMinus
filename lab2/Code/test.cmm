@@ -1,4 +1,15 @@
+struct temp1{
+    int x;
+    float y;
+};
+
+struct temp2{
+    int x;
+    float y;
+};
+
 int main(){
-    float j;
-    10 + j;
+    struct temp1 t1;
+    struct temp2 t2;
+    t1 = t2;
 }

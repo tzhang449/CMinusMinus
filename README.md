@@ -16,6 +16,12 @@ To parse a CMinusMinus text, run
 ./parser code.cmm
 ```
 
+## [lab 2]
+- Do semantic check on the generated AST tree
+
+To do:
+Error type 9 need better print func and caller's format
+
 
 
 
