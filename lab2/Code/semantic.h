@@ -10,7 +10,6 @@ typedef struct SymTable_* SymTable;
 
 enum TYPE_ENUM{
     RD_BASIC, 
-    RD_ARRAY, 
     RD_STRUCTURE
 }; 
 
@@ -19,11 +18,6 @@ struct Type_{
     union{
         // basic type
         enum BASIC_ENUM basic;
-        // for array type
-        struct{
-            Type elem;
-            int size;
-        } array;
         // for struct type
         FieldList structure;
     } u;
@@ -44,7 +38,8 @@ struct FuncType_{
 enum SYM_ENUM {
     RD_TYPE,
     RD_VARIABLE,
-    RD_FUNC
+    RD_FUNC,
+    RD_ARRAY
 };
 
 struct Sym_{
@@ -59,6 +54,11 @@ struct Sym_{
         Sym type_sym;
         //FUNC
         FuncType func_type;
+        //ARRAY
+        struct{
+            Sym type_sym;
+            int size;
+        } array_ty;
     } u;
 
     //points to the AST node of the sym.

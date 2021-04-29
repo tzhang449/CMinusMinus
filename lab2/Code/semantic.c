@@ -7,7 +7,7 @@
 extern SymTable global;
 extern int hasError;
 
-Sym sym_int, sym_float;
+Sym sym_int, sym_float, global_cur_sym;
 char tmpStr[100];
 
 #ifdef DEBUG
@@ -68,7 +68,7 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
         break;
     default:
         ret->u.type_sym = NULL;
-        //for VARIABLE, the analysier should link it to a type sim
+        //for VARIABLE or ARRAY, the analysier should link it to a type sim
         break;
     }
 
@@ -103,14 +103,29 @@ void symTable_addSym(Sym sym)
 Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
 {
     Sym cur = table->head;
-    while (cur)
+    if (kind == RD_TYPE || kind == RD_VARIABLE || kind == RD_ARRAY)
     {
-        if ((cur->kind == RD_TYPE || cur->kind == RD_VARIABLE) && (kind == RD_TYPE || kind == RD_VARIABLE))
+        while (cur)
         {
-            if (strcmp(cur->name, name) == 0)
-                return cur;
+            if (cur->kind == RD_VARIABLE || cur->kind == RD_ARRAY || cur->kind == RD_TYPE)
+            {
+                if (strcmp(cur->name, name) == 0)
+                    return cur;
+            }
+            cur = cur->next;
         }
-        cur = cur->next;
+    }
+    else
+    {
+        while (cur)
+        {
+            if (cur->kind == RD_FUNC)
+            {
+                if (strcmp(cur->name, name) == 0)
+                    return cur;
+            }
+            cur = cur->next;
+        }
     }
     return NULL;
 }
@@ -134,7 +149,8 @@ Sym symTable_find(char *name, enum SYM_ENUM kind)
 int symTable_checkDuplicate(char *name, enum SYM_ENUM kind)
 {
     SymTable cur = global;
-    if (cur && symTable_tableFind(cur, name, kind)){
+    if (cur && symTable_tableFind(cur, name, kind))
+    {
         return 1;
     }
     return 0;
@@ -297,13 +313,54 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_VarDec_I:
     {
         char *name = root->children[0]->str_val;
-
-        Sym typeSym = (Sym)args;
+        int err = symTable_checkDuplicate(name, RD_VARIABLE);
+        if (err)
+        {
+            sprintf(tmpStr, "Redefined variable \"%s\"", name);
+            semanticError(3, root->children[0]->lineno, tmpStr);
+            ret = 1;
+            break;
+        }
         Sym sym = makeSym(RD_VARIABLE, name);
-        sym->u.type_sym = typeSym;
+        sym->u.type_sym = (Sym)args;
+        symTable_addSym(sym);
+        global_cur_sym = sym;
     }
     break;
 
+    case SM_VarDec_VLIR:
+    {
+        ret = nameAnalysis(root->children[0], args);
+        if (ret)
+        {
+            break;
+        }
+        if (global_cur_sym->kind == RD_VARIABLE)
+        {
+            global_cur_sym->kind = RD_ARRAY;
+            global_cur_sym->u.array_ty.type_sym = global_cur_sym->u.type_sym;
+            global_cur_sym->u.array_ty.size = 4 * root->children[2]->int_val;
+        }
+        else
+        {
+            global_cur_sym->u.array_ty.size *= root->children[2]->int_val;
+        }
+    }
+    break;
+
+    case SM_FunDec_ILVR:
+    {
+        char *name = root->children[0]->str_val;
+        int err = symTable_checkDuplicate(name, RD_FUNC);
+        if(err){
+            sprintf(tmpStr, "Redefined function \"%s\"", name);
+            semanticError(4, root->children[0]->lineno, tmpStr);
+            ret = 1;
+            break;
+        }
+        
+    }
+    break;
         //To do
 
     default:
