@@ -17,18 +17,20 @@ YFC = $(shell find ./ -name "*.y" | sed s/[^/]*\\.y/syntax.tab.c/)
 LFO = $(LFC:.c=.o)
 YFO = $(YFC:.c=.o)
 
-parser: clean syntax $(filter-out $(LFO),$(OBJS))
-	$(CC) -o parser $(filter-out $(LFO),$(OBJS)) -lfl -ly
+run: parser
 	./parser test.cmm
-
-debug: clean debug_compile
+	
+gdb: clean debug_compile
 	gdb --args parser test.cmm
 
-sample: clean debug_compile
+debug: clean debug_compile
 	./parser test.cmm
 
 debug_compile: CFLAGS += -g -DDEBUG
 debug_compile: parser
+
+parser: clean syntax $(filter-out $(LFO),$(OBJS))
+	$(CC) -o parser $(filter-out $(LFO),$(OBJS)) -lfl -ly
 
 syntax: lexical syntax-c
 	$(CC) -c $(YFC) -o $(YFO)

@@ -26,7 +26,12 @@ void printIdent()
 
 void semanticError(int errType, int lineno, char *msg)
 {
-    printf("Error type %d at Line %d: %s.\n", errType, lineno, msg);
+    //one error for a line
+    static char a[100000];
+    if(!(a[lineno>>3]&(1<<(lineno&0x7)))){    
+        a[lineno>>3]|=1<<(lineno&0x7);
+        printf("Error type %d at Line %d: %s.\n", errType, lineno, msg);
+    }
 }
 
 Type makeType()
@@ -81,6 +86,18 @@ void structType_addSymTable(Type stype, SymTable table)
     }
 }
 
+Sym structType_findFeild(Sym struct_sym, char*name){
+    Type stype=struct_sym->u.type;
+    FieldList cur=stype->u.structure;
+    while(cur){
+        if(strcmp(cur->name,name)==0){
+            return cur->type_sym;
+        }
+        cur=cur->tail;
+    }
+    return NULL;
+}
+
 FuncParam makeFuncParam(Sym sym)
 {
     FuncParam ret = (FuncParam)malloc(sizeof(struct FuncParam_));
@@ -129,6 +146,49 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
     ret->node = NULL;
     ret->next = NULL;
     return ret;
+}
+
+int typeSym_IsInt(Sym sym){
+    return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC && sym->u.type->u.basic==RD_INT;
+}
+
+int typeSym_IsBasic(Sym sym){
+    return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC;
+}
+
+int typeSym_IsStruct(Sym sym){
+    return sym->kind==RD_TYPE && sym->u.type->kind==RD_STRUCTURE;
+}
+
+int typeSym_IsSame(Sym left_sym,Sym right_sym){
+    if(!left_sym || !right_sym)
+        return 0;
+    if(left_sym->kind!=RD_TYPE || right_sym->kind!=RD_TYPE)
+        return 0;
+    if(left_sym->u.type->kind!=right_sym->u.type->kind)
+        return 0;
+    if(left_sym->u.type->kind==RD_BASIC){
+        return left_sym->u.type->u.basic==right_sym->u.type->u.basic;
+    }else{
+        FieldList left_field=left_sym->u.type->u.structure;
+        FieldList right_field=right_sym->u.type->u.structure;
+        int ret=1;
+        while(1){
+            if(left_field==NULL && right_field==NULL)
+                break;
+            if((left_field==NULL && right_field!=NULL) || (left_field!=NULL && right_field==NULL)){
+                ret=0;
+                break;
+            }
+            ret=ret && typeSym_IsSame(left_field->type_sym,right_field->type_sym);
+            if(ret==0)
+                break;
+            left_field=left_field->tail;
+            right_field=right_field->tail;
+        }
+        return ret;
+    }
+
 }
 
 SymTable makeSymTable()
@@ -871,7 +931,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
 
         char *name = root->children[2]->str_val;
-        Sym field_sym = structType_findFeild(name);
+        Sym field_sym = structType_findFeild(struct_sym,name);
         if (field_sym == NULL)
         {
             ret = 1;

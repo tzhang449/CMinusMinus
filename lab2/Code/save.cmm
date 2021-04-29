@@ -1,0 +1,19 @@
+struct foo1{
+} bar1;
+
+struct foo1{ //err 16
+    int xoo1;
+};
+struct foo2 bar2; //err 17
+
+float bar1,bar3; //err 3
+
+int bar3[10][2][2][3]; //err 3
+
+int main(int a, int a, int bar2){ //err 3
+    
+}
+
+int main(){ //err 4
+
+}
