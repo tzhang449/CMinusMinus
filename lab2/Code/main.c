@@ -7,7 +7,6 @@ extern int yyrestart();
 extern int yyparse();
 
 struct ASTNode* root=NULL;
-SymTable* global=NULL;
 
 int hasError=0;
 

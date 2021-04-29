@@ -4,16 +4,11 @@
 
 #include "semantic.h"
 
-extern SymTable global;
-extern int hasError;
+SymTable global;
 
-enum INSTRUCT{
-    YES,
-    NO
-} isInStruct;
+Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym;
 
-Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym, global_curStruct_sym;
-
+int isInStruct = 0;
 
 char tmpStr[100];
 
@@ -43,6 +38,47 @@ void fillBasicType(Type type, enum TYPE_ENUM basic)
 {
     type->kind = RD_BASIC;
     type->u.basic = basic;
+}
+
+void initStructType(Type type)
+{
+    type->kind = RD_STRUCTURE;
+    type->u.structure = NULL;
+}
+
+FieldList makeFieldList(Sym sym)
+{
+    FieldList ret = (FieldList)malloc(sizeof(struct FieldList_));
+    ret->name = sym->name;
+    ret->type_sym = sym;
+    ret->tail = NULL;
+}
+
+void structType_addSym(Type stype, Sym sym)
+{
+    if (!stype->u.structure)
+    {
+        stype->u.structure = makeFieldList(sym);
+    }
+    else
+    {
+        FieldList cur = stype->u.structure;
+        while (cur->tail)
+        {
+            cur = cur->tail;
+        }
+        cur->tail = makeFieldList(sym);
+    }
+}
+
+void structType_addSymTable(Type stype, SymTable table)
+{
+    Sym cur = table->head;
+    while (cur)
+    {
+        structType_addSym(stype, cur);
+        cur = cur->next;
+    }
 }
 
 FuncParam makeFuncParam(Sym sym)
@@ -308,20 +344,22 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 semanticError(16, root->children[1]->lineno, tmpStr);
                 ret = 1;
             }
-            else
-            {
-                cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
-            }
+            cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
         }
-        if (!ret)
-            cur->u.type->kind = RD_STRUCTURE;
+        initStructType(cur->u.type);
+
+        symTable_addSymTable();
+        isInStruct++;
         ret = nameAnalysis(root->children[3], (void *)cur);
+        isInStruct--;
+        //current sym table now stores content for the struct
+        structType_addSymTable(cur->u.type, global);
+
+        symTable_removeTable();
+        if (args != NULL)
+            *(Sym *)args = cur;
         if (!ret)
-        {
-            if (args != NULL)
-                *(Sym *)args = cur;
             symTable_addSym(cur);
-        }
     }
     break;
 
@@ -348,7 +386,14 @@ int nameAnalysis(struct ASTNode *root, void *args)
         int err = symTable_checkDuplicate(name, RD_VARIABLE);
         if (err)
         {
-            sprintf(tmpStr, "Redefined variable \"%s\"", name);
+            if (!isInStruct)
+            {
+                sprintf(tmpStr, "Redefined variable \"%s\"", name);
+            }
+            else
+            {
+                sprintf(tmpStr, "Redefined field \"%s\"", name);
+            }
             semanticError(3, root->children[0]->lineno, tmpStr);
             ret = 1;
             break;
@@ -493,7 +538,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Stmt_RES:
     {
         ret = nameAnalysis(root->children[1], NULL);
-        if (!istypeSymSame(global_curExp_typeSym, global_curFunc_sym->u.func_type->return_type))
+        if (!typeSym_IsSame(global_curExp_typeSym, global_curFunc_sym->u.func_type->return_type))
         {
             ret = 1;
             sprintf(tmpStr, "Type mismatched for return");
@@ -545,6 +590,247 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     case SM_DefList:
     {
+        ret = nameAnalysis(root->children[0], NULL);
+        ret = nameAnalysis(root->children[1], NULL) || ret;
+    }
+    break;
+
+    case SM_Def:
+    {
+        Sym specifier = NULL;
+        ret = nameAnalysis(root->children[0], (void *)&specifier);
+        ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
+    }
+    break;
+
+    case SM_DecList_D:
+    {
+        ret = nameAnalysis(root->children[0], args);
+    }
+    break;
+
+    case SM_DecList_DCD:
+    {
+        ret = nameAnalysis(root->children[0], args);
+        ret = nameAnalysis(root->children[2], args) || ret;
+    }
+    break;
+
+    case SM_Dec_V:
+    {
+        ret = nameAnalysis(root->children[0], args);
+    }
+    break;
+
+    case SM_Dec_VAE:
+    {
+        ret = nameAnalysis(root->children[0], args);
+        if (isInStruct)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Invalid assignment in struct define");
+            semanticError(15, root->children[0]->lineno, tmpStr);
+            break;
+        }
+        ret = nameAnalysis(root->children[2], NULL);
+        if (!typeSym_IsSame((Sym)args, global_curExp_typeSym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for operands");
+            semanticError(7, root->children[1]->lineno, tmpStr);
+            break;
+        }
+    }
+    break;
+
+    case SM_Exp_ASSIGN:
+    {
+        enum NodeType nodeType = root->children[0]->type;
+        //check if left side is left value
+        if (nodeType != SM_Exp_ID && nodeType != SM_Exp_ELBERB && nodeType != SM_Exp_EDI)
+        {
+            ret = 1;
+            sprintf(tmpStr, "The left-hand side of an assignment must be a variable");
+            semanticError(6, root->children[0]->lineno, tmpStr);
+            ret = nameAnalysis(root->children[2], NULL) || ret;
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        ret = nameAnalysis(root->children[0], NULL);
+        Sym left_sym = global_curExp_typeSym;
+        ret = nameAnalysis(root->children[2], NULL) || ret;
+        Sym right_sym = global_curExp_typeSym;
+        if (!typeSym_IsSame(left_sym, right_sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for assignment");
+            semanticError(5, root->children[0]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        global_curExp_typeSym = left_sym;
+    }
+    break;
+
+    case SM_Exp_AND:
+    case SM_Exp_OR:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        Sym left_sym = global_curExp_typeSym;
+        ret = nameAnalysis(root->children[2], NULL) || ret;
+        Sym right_sym = global_curExp_typeSym;
+        if (!typeSym_IsInt(left_sym) || !typeSym_IsInt(right_sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for operands");
+            semanticError(7, root->children[1]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        global_curExp_typeSym = left_sym;
+    }
+    break;
+
+    case SM_Exp_RELOP:
+    case SM_Exp_PLUS:
+    case SM_Exp_MINUS:
+    case SM_Exp_STAR:
+    case SM_Exp_DIV:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        Sym left_sym = global_curExp_typeSym;
+        ret = nameAnalysis(root->children[2], NULL) || ret;
+        Sym right_sym = global_curExp_typeSym;
+        if (!typeSym_IsBasic(left_sym) || !typeSym_IsBasic(right_sym) ||
+            !typeSym_IsSame(left_sym, right_sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for operands");
+            semanticError(7, root->children[1]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+
+        if (root->type == SM_Exp_RELOP)
+            global_curExp_typeSym = sym_int;
+        else
+            global_curExp_typeSym = left_sym;
+    }
+    break;
+
+    case SM_Exp_LPERP:
+    {
+        ret = nameAnalysis(root->children[1], NULL);
+    }
+    break;
+
+    case SM_Exp_MINUSE:
+    {
+        ret = nameAnalysis(root->children[1], NULL);
+        Sym sym = global_curExp_typeSym;
+        if (!typeSym_IsBasic(sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for operands");
+            semanticError(7, root->children[1]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+    }
+    break;
+
+    case SM_Exp_NOTE:
+    {
+        ret = nameAnalysis(root->children[1], NULL);
+        Sym sym = global_curExp_typeSym;
+        if (!typeSym_IsInt(sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for operands");
+            semanticError(7, root->children[1]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+    }
+    break;
+
+    case SM_Exp_ILPARP:
+    {
+        char *name = root->children[0]->str_val;
+        Sym cur_func = symTable_find(name, RD_FUNC);
+        if (cur_func == NULL)
+        {
+            ret = 1;
+            Sym err11 = symTable_find(name, RD_VARIABLE);
+            if (err11)
+            {
+                sprintf(tmpStr, "\"%s\" is not a function", name);
+                semanticError(2, root->children[0]->lineno, tmpStr);
+            }
+            else
+            {
+                sprintf(tmpStr, "Undefined function \"%s\"", name);
+                semanticError(2, root->children[0]->lineno, tmpStr);
+            }
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        ret = nameAnalysis(root->children[2], cur_func);
+        if (ret)
+        {
+            sprintf(tmpStr, "Function is not applicable for arguments");
+            semanticError(9, root->children[2]->lineno, tmpStr);
+        }
+        global_curExp_typeSym = cur_func->u.func_type->return_type;
+    }
+
+    case SM_Exp_ILPRP:
+    {
+        char *name = root->children[0]->str_val;
+        Sym cur_func = symTable_find(name, RD_FUNC);
+        if (cur_func == NULL)
+        {
+            ret = 1;
+            Sym err11 = symTable_find(name, RD_VARIABLE);
+            if (err11)
+            {
+                sprintf(tmpStr, "\"%s\" is not a function", name);
+                semanticError(2, root->children[0]->lineno, tmpStr);
+            }
+            else
+            {
+                sprintf(tmpStr, "Undefined function \"%s\"", name);
+                semanticError(2, root->children[0]->lineno, tmpStr);
+            }
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        if (cur_func->u.func_type->n_param > 0)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Function is not applicable for arguments");
+            semanticError(9, root->children[2]->lineno, tmpStr);
+        }
+        global_curExp_typeSym = cur_func->u.func_type->return_type;
+    }
+    break;
+
+    case SM_Exp_ELBERB:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        if (ret)
+        {
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        if (global_curExp_typeSym->kind != RD_ARRAY)
+        {
+            ret = 1;
+            sprintf(tmpStr, "\"%s\" is not an array", root->children[0]->str_val);
+            semanticError(10, root->children[2]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
         
     }
     break;
