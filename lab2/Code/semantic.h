@@ -4,8 +4,13 @@
 
 typedef struct Type_* Type;
 typedef struct FieldList_* FieldList;
+
 typedef struct FuncType_* FuncType;
+typedef struct FuncParam_* FuncParam;
+
 typedef struct Sym_* Sym;
+
+
 typedef struct SymTable_* SymTable;
 
 enum TYPE_ENUM{
@@ -32,7 +37,13 @@ struct FieldList_{
 struct FuncType_{
     Sym return_type;
     int n_param;
-    Sym* param_type_sym;
+    FuncParam head;
+};
+
+struct FuncParam_{
+    Sym type;
+    Sym param;
+    FuncParam next;
 };
 
 enum SYM_ENUM {

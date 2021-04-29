@@ -38,9 +38,19 @@ void fillBasicType(Type type, enum TYPE_ENUM basic)
     type->u.basic = basic;
 }
 
+FuncParam makeFuncParam(Sym sym){
+    FuncParam ret=(FuncParam)malloc(sizeof(struct FuncParam_));
+    ret->next=NULL;
+    ret->type=sym->u.type_sym;
+    ret->param=sym;
+}
+
 FuncType makeFuncType()
 {
-    return (FuncType)malloc(sizeof(struct FuncType_));
+    FuncType ret = (FuncType)malloc(sizeof(struct FuncType_));
+    ret->n_param = 0;
+    ret->head = NULL;
+    ret->return_type = NULL;
 }
 
 Sym makeSym(enum SYM_ENUM kind, char *name)
@@ -98,6 +108,14 @@ void symTable_addSym(Sym sym)
     while (cur->next)
         cur = cur->next;
     cur->next = sym;
+}
+
+void symTable_addSymTable()
+{
+    SymTable newST = makeSymTable();
+    global->next = newST;
+    newST->pre = global;
+    global = newST;
 }
 
 Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
@@ -198,8 +216,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         //we need sym of the specifier
         Sym specifier = NULL;
         ret = nameAnalysis(root->children[0], (void *)&specifier);
-        if (!ret)
-            nameAnalysis(root->children[1], (void *)specifier);
+        ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
     }
     break;
 
@@ -214,10 +231,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
         //we need sym of the specifier
         Sym specifier = NULL;
         ret = nameAnalysis(root->children[0], (void *)&specifier);
-        if (!ret)
-            ret = nameAnalysis(root->children[1], (void *)specifier);
-        if (!ret)
-            ret = nameAnalysis(root->children[2], NULL);
+        ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
+        ret = nameAnalysis(root->children[2], NULL) || ret;
     }
     break;
 
@@ -230,7 +245,6 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_ExtDecList_VCE:
     {
         ret = nameAnalysis(root->children[0], args);
-        //child 1 is comma, skip it
         ret = nameAnalysis(root->children[2], args) || ret;
     }
     break;
@@ -277,13 +291,15 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 sprintf(tmpStr, "Duplicated name \"%s\"", name);
                 semanticError(16, root->children[1]->lineno, tmpStr);
                 ret = 1;
-                break;
             }
-
-            cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
+            else
+            {
+                cur = makeSym(RD_TYPE, root->children[1]->children[0]->str_val);
+            }
         }
-        cur->u.type->kind = RD_STRUCTURE;
-        nameAnalysis(root->children[3], (void *)&cur);
+        if (!ret)
+            cur->u.type->kind = RD_STRUCTURE;
+        ret = nameAnalysis(root->children[3], (void *)cur);
         if (!ret)
         {
             if (args != NULL)
@@ -321,10 +337,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
             ret = 1;
             break;
         }
-        Sym sym = makeSym(RD_VARIABLE, name);
-        sym->u.type_sym = (Sym)args;
-        symTable_addSym(sym);
-        global_cur_sym = sym;
+        Sym cur = makeSym(RD_VARIABLE, name);
+        cur->u.type_sym = (Sym)args;
+        symTable_addSym(cur);
+        global_cur_sym = cur;
     }
     break;
 
@@ -352,13 +368,73 @@ int nameAnalysis(struct ASTNode *root, void *args)
     {
         char *name = root->children[0]->str_val;
         int err = symTable_checkDuplicate(name, RD_FUNC);
-        if(err){
+        if (err)
+        {
             sprintf(tmpStr, "Redefined function \"%s\"", name);
             semanticError(4, root->children[0]->lineno, tmpStr);
             ret = 1;
-            break;
         }
-        
+        Sym cur = makeSym(RD_FUNC, name);
+        cur->u.func_type->return_type = (Sym)args;
+        symTable_addSymTable();
+        ret = nameAnalysis(root->children[2], cur);
+        if (!ret)
+            symTable_addSym(cur);
+    }
+    break;
+
+    case SM_FunDec_ILR:
+    {
+        char *name = root->children[0]->str_val;
+        int err = symTable_checkDuplicate(name, RD_FUNC);
+        if (err)
+        {
+            sprintf(tmpStr, "Redefined function \"%s\"", name);
+            semanticError(4, root->children[0]->lineno, tmpStr);
+            ret = 1;
+        }
+        if (!ret)
+        {
+            Sym cur = makeSym(RD_FUNC, name);
+            cur->u.func_type->return_type = (Sym)args;
+            symTable_addSym(cur);
+        }
+        symTable_addSymTable();
+    }
+    break;
+
+    case SM_VarList_PCV:
+    {
+        ret=nameAnalysis(root->children[0],args);
+        ret=nameAnalysis(root->children[2],args) || ret;
+    }
+    break;
+
+    case SM_VarList_P:{
+        ret=nameAnalysis(root->children[0],args);
+    }
+    break;
+
+    case SM_ParamDec:{
+        Sym func_sym=(Sym)args;
+        //we need sym of the specifier
+        Sym specifier = NULL;
+        ret = nameAnalysis(root->children[0], (void *)&specifier);
+        ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
+        if(!ret){
+            FuncType func_type=func_sym->u.func_type;
+            func_type->n_param++;
+            
+            FuncParam param=makeFuncParam(global_cur_sym);
+            if(!func_type->head){
+                func_type->head=param;
+            }else{
+                FuncParam cur=func_type->head;
+                while(cur->next)
+                    cur=cur->next;
+                cur->next=param;
+            }
+        }
     }
     break;
         //To do
