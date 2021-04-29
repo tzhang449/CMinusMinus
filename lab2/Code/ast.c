@@ -29,10 +29,6 @@ void insert(struct ASTNode *root, struct ASTNode *child)
         printf("ASTnode insert error: root node does not exist!\n");
         return;
     }
-    if (!child)
-    {
-        return;
-    }
 
     if (root->numKids >= 10)
     {

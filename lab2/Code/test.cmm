@@ -3,9 +3,12 @@ struct a{
 } b;
 
 
-struct fuck c;
+struct c e;
 
-struct a{
+struct {
     int b;
 };
 
+int main(){
+    
+}

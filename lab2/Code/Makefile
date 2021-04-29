@@ -20,6 +20,15 @@ YFO = $(YFC:.c=.o)
 parser: syntax $(filter-out $(LFO),$(OBJS))
 	$(CC) -o parser $(filter-out $(LFO),$(OBJS)) -lfl -ly
 
+debug: clean debug_compile
+	gdb --args parser test.cmm
+
+sample: clean debug_compile
+	./parser test.cmm
+
+debug_compile: CFLAGS += -g -DDEBUG
+debug_compile: parser
+
 syntax: lexical syntax-c
 	$(CC) -c $(YFC) -o $(YFO)
 
