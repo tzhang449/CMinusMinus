@@ -81,7 +81,7 @@ void structType_addSymTable(Type stype, SymTable table)
     Sym cur = table->head;
     while (cur)
     {
-        structType_addSym(stype, cur);
+        structType_addSym(stype, cur->u.type_sym);
         cur = cur->next;
     }
 }
@@ -167,7 +167,6 @@ int typeSym_IsStruct(Sym sym){
 }
 
 int typeSym_IsSame(Sym left_sym,Sym right_sym){
-    printf("left:%d right:%d\n",left_sym->kind,right_sym->kind);
     if(!left_sym || !right_sym)
         return 0;
     if(left_sym->kind!=RD_TYPE || right_sym->kind!=RD_TYPE)

@@ -1,11 +1,11 @@
 struct temp1{
     int x;
-    float y;
+    float y[1][2][3];
 };
 
 struct temp2{
     int x;
-    float y;
+    float z[1];
 };
 
 int main(){
