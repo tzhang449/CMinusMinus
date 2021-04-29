@@ -7,7 +7,7 @@
 SymTable global;
 
 Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym;
-
+FuncParam global_funcparam;
 int isInStruct = 0;
 
 char tmpStr[100];
@@ -775,6 +775,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
+        global_funcparam = NULL;
         ret = nameAnalysis(root->children[2], cur_func);
         if (ret)
         {
@@ -823,7 +824,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        if (global_curExp_typeSym->kind != RD_ARRAY)
+        Sym array_sym = global_curExp_typeSym;
+        if (array_sym->kind != RD_ARRAY)
         {
             ret = 1;
             sprintf(tmpStr, "\"%s\" is not an array", root->children[0]->str_val);
@@ -831,7 +833,171 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        
+        ret = nameAnalysis(root->children[2], NULL);
+        if (ret)
+        {
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        Sym int_sym = global_curExp_typeSym;
+        if (!typeSym_IsInt(int_sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "\"%s\" is not an integer", root->children[2]->str_val);
+            semanticError(12, root->children[2]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        global_curExp_typeSym = array_sym->u.array_ty.type_sym;
+    }
+    break;
+
+    case SM_Exp_EDI:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        if (ret)
+        {
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        Sym struct_sym = global_curExp_typeSym;
+        if (!typeSym_IsStruct(struct_sym))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Illegal use of \".\"");
+            semanticError(13, root->children[2]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+
+        char *name = root->children[2]->str_val;
+        Sym field_sym = structType_findFeild(name);
+        if (field_sym == NULL)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Non-existent field \"%s\"", name);
+            semanticError(14, root->children[2]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        global_curExp_typeSym = field_sym->u.type_sym;
+    }
+    break;
+
+    case SM_Exp_ID:
+    {
+        char *name = root->children[0]->str_val;
+        Sym vari_sym = symTable_find(name, RD_VARIABLE);
+        if (vari_sym == NULL)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Undefined variable \"%s\"", name);
+            semanticError(1, root->children[0]->lineno, tmpStr);
+            global_curExp_typeSym = NULL;
+            break;
+        }
+        global_curExp_typeSym = vari_sym->u.type_sym;
+    }
+    break;
+
+    case SM_Exp_INT:
+    {
+        global_curExp_typeSym = sym_int;
+    }
+    break;
+
+    case SM_Exp_FLOAT:
+    {
+        global_curExp_typeSym = sym_float;
+    }
+    break;
+
+    case SM_Args_ECA:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        if (ret)
+            break;
+        Sym left_sym = global_curExp_typeSym;
+        Sym cur = NULL;
+        if (global_funcparam == NULL)
+        {
+            Sym func_sym = (Sym)args;
+            if (func_sym->u.func_type->head == NULL)
+            {
+                ret = 1;
+                break;
+            }
+            else
+            {
+                global_funcparam = func_sym->u.func_type->head;
+                cur = global_funcparam->type;
+            }
+        }
+        else
+        {
+            if (global_funcparam->next == NULL)
+            {
+                ret = 1;
+                break;
+            }
+            else
+            {
+                global_funcparam = global_funcparam->next;
+                cur = global_funcparam->type;
+            }
+        }
+        if (!typeSym_IsSame(left_sym, cur))
+        {
+            ret = 1;
+            break;
+        }
+        ret = nameAnalysis(root->children[2], NULL) || ret;
+    }
+
+    case SM_Args_E:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        if (ret)
+            break;
+        Sym left_sym = global_curExp_typeSym;
+        Sym cur = NULL;
+        if (global_funcparam == NULL)
+        {
+            Sym func_sym = (Sym)args;
+            if (func_sym->u.func_type->head == NULL)
+            {
+                ret = 1;
+                break;
+            }
+            else
+            {
+                global_funcparam = func_sym->u.func_type->head;
+                cur = global_funcparam->type;
+            }
+        }
+        else
+        {
+            if (global_funcparam->next == NULL)
+            {
+                ret = 1;
+                break;
+            }
+            else
+            {
+                global_funcparam = global_funcparam->next;
+                cur = global_funcparam->type;
+            }
+        }
+        if (!typeSym_IsSame(left_sym, cur))
+        {
+            ret = 1;
+            break;
+        }
+        if (global_funcparam->next)
+        {
+            ret = 1;
+            break;
+        }
     }
     break;
 
