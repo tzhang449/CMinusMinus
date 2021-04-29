@@ -7,7 +7,14 @@
 extern SymTable global;
 extern int hasError;
 
-Sym sym_int, sym_float, global_cur_sym;
+enum INSTRUCT{
+    YES,
+    NO
+} isInStruct;
+
+Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym, global_curStruct_sym;
+
+
 char tmpStr[100];
 
 #ifdef DEBUG
@@ -346,10 +353,13 @@ int nameAnalysis(struct ASTNode *root, void *args)
             ret = 1;
             break;
         }
-        Sym cur = makeSym(RD_VARIABLE, name);
-        cur->u.type_sym = (Sym)args;
-        symTable_addSym(cur);
-        global_cur_sym = cur;
+        if (!ret)
+        {
+            Sym cur = makeSym(RD_VARIABLE, name);
+            cur->u.type_sym = (Sym)args;
+            symTable_addSym(cur);
+            global_curDef_sym = cur;
+        }
     }
     break;
 
@@ -360,15 +370,15 @@ int nameAnalysis(struct ASTNode *root, void *args)
         {
             break;
         }
-        if (global_cur_sym->kind == RD_VARIABLE)
+        if (global_curDef_sym->kind == RD_VARIABLE)
         {
-            global_cur_sym->kind = RD_ARRAY;
-            global_cur_sym->u.array_ty.type_sym = global_cur_sym->u.type_sym;
-            global_cur_sym->u.array_ty.size = 4 * root->children[2]->int_val;
+            global_curDef_sym->kind = RD_ARRAY;
+            global_curDef_sym->u.array_ty.type_sym = global_curDef_sym->u.type_sym;
+            global_curDef_sym->u.array_ty.size = 4 * root->children[2]->int_val;
         }
         else
         {
-            global_cur_sym->u.array_ty.size *= root->children[2]->int_val;
+            global_curDef_sym->u.array_ty.size *= root->children[2]->int_val;
         }
     }
     break;
@@ -385,10 +395,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         Sym cur = makeSym(RD_FUNC, name);
         cur->u.func_type->return_type = (Sym)args;
+        symTable_addSym(cur);
+        global_curFunc_sym = cur;
         symTable_addSymTable();
-        ret = nameAnalysis(root->children[2], cur);
-        if (!ret)
-            symTable_addSym(cur);
+        ret = nameAnalysis(root->children[2], cur) || ret;
     }
     break;
 
@@ -402,12 +412,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
             semanticError(4, root->children[0]->lineno, tmpStr);
             ret = 1;
         }
-        if (!ret)
-        {
-            Sym cur = makeSym(RD_FUNC, name);
-            cur->u.func_type->return_type = (Sym)args;
-            symTable_addSym(cur);
-        }
+
+        Sym cur = makeSym(RD_FUNC, name);
+        cur->u.func_type->return_type = (Sym)args;
+        symTable_addSym(cur);
+
         symTable_addSymTable();
     }
     break;
@@ -437,7 +446,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             FuncType func_type = func_sym->u.func_type;
             func_type->n_param++;
 
-            FuncParam param = makeFuncParam(global_cur_sym);
+            FuncParam param = makeFuncParam(global_curDef_sym);
             if (!func_type->head)
             {
                 func_type->head = param;
@@ -453,7 +462,92 @@ int nameAnalysis(struct ASTNode *root, void *args)
     }
     break;
 
+    case SM_CompSt:
+    {
+        ret = nameAnalysis(root->children[1], NULL);
+        ret = nameAnalysis(root->children[2], NULL) || ret;
+    }
+    break;
+
+    case SM_StmtList:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+        ret = nameAnalysis(root->children[1], NULL) || ret;
+    }
+    break;
+
+    case SM_Stmt_ES:
+    {
+        ret = nameAnalysis(root->children[0], NULL);
+    }
+    break;
+
+    case SM_Stmt_C:
+    {
+        symTable_addSymTable();
+        ret = nameAnalysis(root->children[0], NULL);
+        symTable_removeTable();
+    }
+    break;
+
+    case SM_Stmt_RES:
+    {
+        ret = nameAnalysis(root->children[1], NULL);
+        if (!istypeSymSame(global_curExp_typeSym, global_curFunc_sym->u.func_type->return_type))
+        {
+            ret = 1;
+            sprintf(tmpStr, "Type mismatched for return");
+            semanticError(8, root->children[0]->lineno, tmpStr);
+        }
+    }
+    break;
+
+    case SM_Stmt_ILERS:
+    {
+        ret = nameAnalysis(root->children[2], NULL);
+        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Exp type mismatched for if, should be INT");
+            semanticError(7, root->children[2]->lineno, tmpStr);
+        }
+        ret = nameAnalysis(root->children[4], NULL) || ret;
+    }
+    break;
+
+    case SM_Stmt_ILERSES:
+    {
+        ret = nameAnalysis(root->children[2], NULL);
+        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Condition type mismatched for if, should be INT");
+            semanticError(7, root->children[2]->lineno, tmpStr);
+        }
+        ret = nameAnalysis(root->children[4], NULL) || ret;
+        ret = nameAnalysis(root->children[6], NULL) || ret;
+    }
+    break;
         //To do
+
+    case SM_Stmt_WLERS:
+    {
+        ret = nameAnalysis(root->children[2], NULL);
+        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        {
+            ret = 1;
+            sprintf(tmpStr, "Condition type mismatched for while, should be INT");
+            semanticError(7, root->children[2]->lineno, tmpStr);
+        }
+        ret = nameAnalysis(root->children[4], NULL) || ret;
+    }
+    break;
+
+    case SM_DefList:
+    {
+        
+    }
+    break;
 
     default:
     {

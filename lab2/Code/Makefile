@@ -17,8 +17,9 @@ YFC = $(shell find ./ -name "*.y" | sed s/[^/]*\\.y/syntax.tab.c/)
 LFO = $(LFC:.c=.o)
 YFO = $(YFC:.c=.o)
 
-parser: syntax $(filter-out $(LFO),$(OBJS))
+parser: clean syntax $(filter-out $(LFO),$(OBJS))
 	$(CC) -o parser $(filter-out $(LFO),$(OBJS)) -lfl -ly
+	./parser test.cmm
 
 debug: clean debug_compile
 	gdb --args parser test.cmm
