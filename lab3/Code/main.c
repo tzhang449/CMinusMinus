@@ -27,6 +27,7 @@ int main(int argc, char **argv)
     
     if(hasError)
         return 0;
+    //print_node(root);
 
     if(nameAnalysis(root,NULL)){
         //error

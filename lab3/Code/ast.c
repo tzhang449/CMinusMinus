@@ -39,3 +39,17 @@ void insert(struct ASTNode *root, struct ASTNode *child)
     root->numKids++;
 }
 
+void print_node(struct ASTNode *root){
+    if(!root)
+        return;
+    static int indent=0;
+    indent+=2;
+    for(int i=0;i<indent;i++){
+        printf(" ");
+    }
+    printf("%s\n",root->name);
+    for(int i=0;i<root->numKids;i++){
+        print_node(root->children[i]);
+    }
+    indent-=2;
+}

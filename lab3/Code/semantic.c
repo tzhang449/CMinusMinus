@@ -4,11 +4,11 @@
 
 #include "semantic.h"
 
-SymTable global;
+SymTable global, globaltype;
 
 Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym;
-FuncParam global_funcparam;
-int isInStruct = 0;
+FuncParam global_funcparam, funccheck_param;
+int isInStruct = 0, isInDeclare = 0, isDeclared = 0;
 
 char tmpStr[100];
 
@@ -28,11 +28,14 @@ void semanticError(int errType, int lineno, char *msg)
 {
     //one error for a line
     static char a[100000];
-    if(!(a[lineno>>3]&(1<<(lineno&0x7)))){    
-        a[lineno>>3]|=1<<(lineno&0x7);
+    if (!(a[lineno >> 3] & (1 << (lineno & 0x7))))
+    {
+        a[lineno >> 3] |= 1 << (lineno & 0x7);
         printf("Error type %d at Line %d: %s.\n", errType, lineno, msg);
     }
 }
+
+Sym makeSym(enum SYM_ENUM kind, char *name);
 
 Type makeType()
 {
@@ -51,11 +54,36 @@ void initStructType(Type type)
     type->u.structure = NULL;
 }
 
+void initArrayType(Type array_type, Sym type_sym, int dim_size)
+{
+    array_type->kind = RD_ARRAY;
+    array_type->u.array_ty.dim = 1;
+    array_type->u.array_ty.elem = type_sym;
+    array_type->u.array_ty.next = NULL;
+    array_type->u.array_ty.size = dim_size;
+    array_type->u.array_ty.total_size = dim_size;
+}
+
+void addArrayType(Type array_type, int dim_size)
+{
+    if (array_type->u.array_ty.next == NULL)
+    {
+        array_type->u.array_ty.next = makeSym(RD_TYPE, NULL);
+        initArrayType(array_type->u.array_ty.next->u.type, array_type->u.array_ty.elem, dim_size);
+    }
+    else
+    {
+        addArrayType(array_type->u.array_ty.next->u.type, dim_size);
+    }
+    array_type->u.array_ty.dim = array_type->u.array_ty.next->u.type->u.array_ty.dim + 1;
+    array_type->u.array_ty.total_size = array_type->u.array_ty.next->u.type->u.array_ty.total_size * array_type->u.array_ty.size;
+}
+
 FieldList makeFieldList(Sym sym)
 {
     FieldList ret = (FieldList)malloc(sizeof(struct FieldList_));
     ret->name = sym->name;
-    ret->type_sym = sym;
+    ret->sym = sym;
     ret->tail = NULL;
 }
 
@@ -78,22 +106,29 @@ void structType_addSym(Type stype, Sym sym)
 
 void structType_addSymTable(Type stype, SymTable table)
 {
+    //symTable_print(table);
     Sym cur = table->head;
     while (cur)
     {
-        structType_addSym(stype, cur->u.type_sym);
+        if (cur->kind == RD_VARIABLE || cur->kind == RD_ARRAY_VARIABLE)
+            structType_addSym(stype, cur);
         cur = cur->next;
     }
 }
 
-Sym structType_findFeild(Sym struct_sym, char*name){
-    Type stype=struct_sym->u.type;
-    FieldList cur=stype->u.structure;
-    while(cur){
-        if(strcmp(cur->name,name)==0){
-            return cur->type_sym;
+Sym structType_findFeild(Sym struct_sym, char *name)
+{
+    if (name == NULL)
+        return NULL;
+    Type stype = struct_sym->u.type;
+    FieldList cur = stype->u.structure;
+    while (cur)
+    {
+        if (cur->name && strcmp(cur->name, name) == 0)
+        {
+            return cur->sym;
         }
-        cur=cur->tail;
+        cur = cur->tail;
     }
     return NULL;
 }
@@ -112,6 +147,90 @@ FuncType makeFuncType()
     ret->n_param = 0;
     ret->head = NULL;
     ret->return_type = NULL;
+    ret->defined = 0;
+}
+
+void printSym(Sym sym, char *str)
+{
+    static int indent = 0;
+    if (sym == NULL)
+        return;
+    switch (sym->kind)
+    {
+    case RD_TYPE:
+        switch (sym->u.type->kind)
+        {
+        case RD_STRUCTURE:
+        {
+            printf("struct %s {\n", sym->name);
+            indent += 2;
+            FieldList cur = sym->u.type->u.structure;
+            while (cur)
+            {
+                for (int i = 0; i < indent; i++)
+                {
+                    printf(" ");
+                }
+                printSym(cur->sym, ";\n");
+                cur = cur->tail;
+            }
+            indent -= 2;
+            for (int i = 0; i < indent; i++)
+            {
+                printf(" ");
+            }
+            printf("}");
+        }
+        break;
+
+        case RD_ARRAY:
+        {
+            printf("[%d]", sym->u.type->u.array_ty.size);
+            printSym(sym->u.type->u.array_ty.next, "");
+        }
+        break;
+
+        case RD_BASIC:
+        {
+            switch (sym->u.type->u.basic)
+            {
+            case RD_INT:
+                printf("int");
+                break;
+
+            case RD_FLOAT:
+                printf("float");
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        default:
+            break;
+        }
+        break;
+
+    case RD_VARIABLE:
+    {
+        printSym(sym->u.type_sym, " ");
+        printf("%s", sym->name);
+    }
+    break;
+
+    case RD_ARRAY_VARIABLE:
+    {
+        printSym(sym->u.type_sym->u.type->u.array_ty.elem, " ");
+        printf("%s", sym->name);
+        printSym(sym->u.type_sym, "");
+    }
+    break;
+    //to do
+    default:
+        break;
+    }
+    printf("%s", str);
 }
 
 Sym makeSym(enum SYM_ENUM kind, char *name)
@@ -143,58 +262,71 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
         break;
     }
 
-    ret->node = NULL;
     ret->next = NULL;
     return ret;
 }
 
-int typeSym_IsInt(Sym sym){
-    if(!sym)
+int typeSym_IsInt(Sym sym)
+{
+    if (!sym)
         return 0;
-    return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC && sym->u.type->u.basic==RD_INT;
+    return sym->kind == RD_TYPE && sym->u.type->kind == RD_BASIC && sym->u.type->u.basic == RD_INT;
 }
 
-int typeSym_IsBasic(Sym sym){
-    if(!sym)
+int typeSym_IsBasic(Sym sym)
+{
+    if (!sym)
         return 0;
-    return sym->kind==RD_TYPE && sym->u.type->kind==RD_BASIC;
+    return sym->kind == RD_TYPE && sym->u.type->kind == RD_BASIC;
 }
 
-int typeSym_IsStruct(Sym sym){
-    if(!sym)
+int typeSym_IsStruct(Sym sym)
+{
+    if (!sym)
         return 0;
-    return sym->kind==RD_TYPE && sym->u.type->kind==RD_STRUCTURE;
+    return sym->kind == RD_TYPE && sym->u.type->kind == RD_STRUCTURE;
 }
 
-int typeSym_IsSame(Sym left_sym,Sym right_sym){
-    if(!left_sym || !right_sym)
+int typeSym_IsSame(Sym left_sym, Sym right_sym)
+{
+    if (!left_sym || !right_sym)
         return 0;
-    if(left_sym->kind!=RD_TYPE || right_sym->kind!=RD_TYPE)
+    if (left_sym->kind != RD_TYPE || right_sym->kind != RD_TYPE)
         return 0;
-    if(left_sym->u.type->kind!=right_sym->u.type->kind)
+    if (left_sym->u.type->kind != right_sym->u.type->kind)
         return 0;
-    if(left_sym->u.type->kind==RD_BASIC){
-        return left_sym->u.type->u.basic==right_sym->u.type->u.basic;
-    }else{
-        FieldList left_field=left_sym->u.type->u.structure;
-        FieldList right_field=right_sym->u.type->u.structure;
-        int ret=1;
-        while(1){
-            if(left_field==NULL && right_field==NULL)
+    if (left_sym->u.type->kind == RD_BASIC)
+    {
+        return left_sym->u.type->u.basic == right_sym->u.type->u.basic;
+    }
+    else if (left_sym->u.type->kind == RD_STRUCTURE)
+    {
+        //struct type
+        FieldList left_field = left_sym->u.type->u.structure;
+        FieldList right_field = right_sym->u.type->u.structure;
+        int ret = 1;
+        while (1)
+        {
+            if (left_field == NULL && right_field == NULL)
                 break;
-            if((left_field==NULL && right_field!=NULL) || (left_field!=NULL && right_field==NULL)){
-                ret=0;
+            if ((left_field == NULL && right_field != NULL) || (left_field != NULL && right_field == NULL))
+            {
+                ret = 0;
                 break;
             }
-            ret=ret && typeSym_IsSame(left_field->type_sym,right_field->type_sym);
-            if(ret==0)
+            ret = ret && typeSym_IsSame(left_field->sym->u.type_sym, right_field->sym->u.type_sym);
+            if (ret == 0)
                 break;
-            left_field=left_field->tail;
-            right_field=right_field->tail;
+            left_field = left_field->tail;
+            right_field = right_field->tail;
         }
         return ret;
     }
-
+    else
+    {
+        //array type
+        return typeSym_IsSame(left_sym->u.type->u.array_ty.elem, right_sym->u.type->u.array_ty.elem) && left_sym->u.type->u.array_ty.dim == right_sym->u.type->u.array_ty.dim;
+    }
 }
 
 SymTable makeSymTable()
@@ -206,15 +338,15 @@ SymTable makeSymTable()
     return ret;
 }
 
-void symTable_addSym(Sym sym)
+void symTable_addSym(SymTable table, Sym sym)
 {
-    if (!global->head)
+    if (!table->head)
     {
-        global->head = sym;
+        table->head = sym;
         return;
     }
 
-    Sym cur = global->head;
+    Sym cur = table->head;
     while (cur->next)
         cur = cur->next;
     cur->next = sym;
@@ -228,21 +360,34 @@ void symTable_addSymTable()
     global = newST;
 }
 
-//We need RAII or GC! Memory leak here.
+//We need RAII or GC!!! Memory leak here.
 void symTable_removeTable()
 {
+    if (global->pre == NULL)
+        return;
     global = global->pre;
     global->next = NULL;
+}
+
+void symTable_print(SymTable table)
+{
+    Sym head = table->head;
+    printf("table content:\n");
+    while (head)
+    {
+        printf("  (%s)\n", head->name);
+        head = head->next;
+    }
 }
 
 Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
 {
     Sym cur = table->head;
-    if (kind == RD_TYPE || kind == RD_VARIABLE || kind == RD_ARRAY)
+    if (kind == RD_TYPE || kind == RD_VARIABLE || kind == RD_ARRAY_VARIABLE)
     {
         while (cur)
         {
-            if (cur->kind == RD_VARIABLE || cur->kind == RD_ARRAY || cur->kind == RD_TYPE)
+            if (cur->name && (cur->kind == RD_VARIABLE || cur->kind == RD_TYPE || cur->kind == RD_ARRAY_VARIABLE))
             {
                 if (strcmp(cur->name, name) == 0)
                     return cur;
@@ -254,7 +399,7 @@ Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
     {
         while (cur)
         {
-            if (cur->kind == RD_FUNC)
+            if (cur->name && cur->kind == RD_FUNC)
             {
                 if (strcmp(cur->name, name) == 0)
                     return cur;
@@ -265,9 +410,9 @@ Sym symTable_tableFind(SymTable table, char *name, enum SYM_ENUM kind)
     return NULL;
 }
 
-Sym symTable_find(char *name, enum SYM_ENUM kind)
+Sym symTable_find(SymTable table, char *name, enum SYM_ENUM kind)
 {
-    SymTable cur = global;
+    SymTable cur = table;
     Sym ret = NULL;
     while (cur)
     {
@@ -283,12 +428,41 @@ Sym symTable_find(char *name, enum SYM_ENUM kind)
 
 int symTable_checkDuplicate(char *name, enum SYM_ENUM kind)
 {
-    SymTable cur = global;
-    if (cur && symTable_tableFind(cur, name, kind))
+    switch (kind)
     {
-        return 1;
+    case RD_TYPE:
+    {
+        int ret = symTable_tableFind(globaltype, name, RD_TYPE) != NULL;
+        ret = ret || symTable_find(global, name, RD_VARIABLE);
+        return ret;
     }
-    return 0;
+    break;
+    default:
+    {
+        int ret = symTable_tableFind(globaltype, name, RD_TYPE) != NULL;
+        ret = ret || symTable_tableFind(global, name, kind);
+        return ret;
+    }
+    break;
+    }
+}
+
+int checkUndefinedFunc()
+{
+    Sym cur = global->head;
+    int ret = 0;
+    while (cur)
+    {
+        if (cur->kind == RD_FUNC &&
+            !cur->u.func_type->defined)
+        {
+            sprintf(tmpStr, "Undefined function \"%s\"", cur->name);
+            semanticError(18, cur->u.func_type->lineno, tmpStr);
+            ret = 1;
+        }
+        cur = cur->next;
+    }
+    return ret;
 }
 
 // on success, 0 is returned. Otherwise, 1 is returned.
@@ -316,8 +490,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
         sym_float = makeSym(RD_TYPE, "float");
         fillBasicType(sym_float->u.type, RD_FLOAT);
 
+        globaltype = makeSymTable();
         global = makeSymTable();
         ret = nameAnalysis(root->children[0], NULL);
+        ret = checkUndefinedFunc();
     }
     break;
 
@@ -349,8 +525,21 @@ int nameAnalysis(struct ASTNode *root, void *args)
         Sym specifier = NULL;
         ret = nameAnalysis(root->children[0], (void *)&specifier);
         ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
-        ret = nameAnalysis(root->children[2], NULL) || ret;
+        if (!ret)
+            ret = nameAnalysis(root->children[2], NULL) || ret;
         symTable_removeTable();
+    }
+    break;
+
+    case SM_ExtDef_SFS:
+    {
+        //we need sym of the specifier
+        Sym specifier = NULL;
+        isInDeclare++;
+        ret = nameAnalysis(root->children[0], (void *)&specifier);
+        ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
+        symTable_removeTable();
+        isInDeclare--;
     }
     break;
 
@@ -369,6 +558,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     case SM_Specifiers_T:
     {
+        if(!args)
+            break;
         switch (root->children[0]->type_val)
         {
         case RD_INT:
@@ -426,15 +617,15 @@ int nameAnalysis(struct ASTNode *root, void *args)
         symTable_removeTable();
         if (args != NULL)
             *(Sym *)args = cur;
-        if(!duplicated_name)
-            symTable_addSym(cur);
+        if (!duplicated_name)
+            symTable_addSym(globaltype, cur);
     }
     break;
 
     case SM_StructSpecifier_ST:
     {
         char *name = root->children[1]->children[0]->str_val;
-        Sym cur = symTable_find(name, RD_TYPE);
+        Sym cur = symTable_find(globaltype, name, RD_TYPE);
         if (!cur)
         {
             ret = 1;
@@ -472,7 +663,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         {
             Sym cur = makeSym(RD_VARIABLE, name);
             cur->u.type_sym = (Sym)args;
-            symTable_addSym(cur);
+            symTable_addSym(global, cur);
             global_curDef_sym = cur;
         }
     }
@@ -485,54 +676,108 @@ int nameAnalysis(struct ASTNode *root, void *args)
         {
             break;
         }
+        Sym cur;
         if (global_curDef_sym->kind == RD_VARIABLE)
         {
-            global_curDef_sym->kind = RD_ARRAY;
-            global_curDef_sym->u.array_ty.type_sym = global_curDef_sym->u.type_sym;
-            global_curDef_sym->u.array_ty.size = 4 * root->children[2]->int_val;
+            cur = global_curDef_sym;
+            cur->kind = RD_ARRAY_VARIABLE;
+            Sym elem = cur->u.type_sym;
+            cur->u.type_sym = makeSym(RD_TYPE, NULL);
+            initArrayType(cur->u.type_sym->u.type, elem, root->children[2]->int_val);
         }
         else
         {
-            global_curDef_sym->u.array_ty.size *= root->children[2]->int_val;
+            cur = global_curDef_sym;
+            addArrayType(cur->u.type_sym->u.type, root->children[2]->int_val);
         }
+        global_curDef_sym = cur;
     }
     break;
 
     case SM_FunDec_ILVR:
     {
         char *name = root->children[0]->str_val;
-        int err = symTable_checkDuplicate(name, RD_FUNC);
-        if (err)
+        Sym func_sym = symTable_find(global, name, RD_FUNC);
+        if (func_sym && !isInDeclare && func_sym->u.func_type->defined)
         {
             sprintf(tmpStr, "Redefined function \"%s\"", name);
             semanticError(4, root->children[0]->lineno, tmpStr);
             ret = 1;
+            break;
         }
-        Sym cur = makeSym(RD_FUNC, name);
-        cur->u.func_type->return_type = (Sym)args;
-        symTable_addSym(cur);
-        global_curFunc_sym = cur;
-        symTable_addSymTable();
-        ret = nameAnalysis(root->children[2], cur) || ret;
+        if (!func_sym)
+        {
+            Sym cur = makeSym(RD_FUNC, name);
+            cur->u.func_type->lineno = root->children[0]->lineno;
+            cur->u.func_type->return_type = (Sym)args;
+            cur->u.func_type->defined = !isInDeclare;
+            symTable_addSym(global, cur);
+            global_curFunc_sym = cur;
+            symTable_addSymTable();
+            ret = nameAnalysis(root->children[2], cur) || ret;
+        }
+        else
+        {
+            isDeclared = 1;
+            symTable_addSymTable();
+            funccheck_param = func_sym->u.func_type->head;
+            global_curFunc_sym = func_sym;
+            ret = !typeSym_IsSame(func_sym->u.func_type->return_type, (Sym)args) || ret;
+            ret = nameAnalysis(root->children[2], func_sym) || ret;
+            if (!isInDeclare && !func_sym->u.func_type->defined)
+            {
+                func_sym->u.func_type->defined = 1;
+            }
+            if (ret)
+            {
+                sprintf(tmpStr, "Inconsistent declaration of function \"%s\"", name);
+                semanticError(19, root->children[0]->lineno, tmpStr);
+            }
+            isDeclared = 0;
+        }
     }
     break;
 
     case SM_FunDec_ILR:
     {
         char *name = root->children[0]->str_val;
-        int err = symTable_checkDuplicate(name, RD_FUNC);
-        if (err)
+        Sym func_sym = symTable_find(global, name, RD_FUNC);
+        if (func_sym && !isInDeclare && func_sym->u.func_type->defined)
         {
             sprintf(tmpStr, "Redefined function \"%s\"", name);
             semanticError(4, root->children[0]->lineno, tmpStr);
             ret = 1;
+            break;
         }
-
-        Sym cur = makeSym(RD_FUNC, name);
-        cur->u.func_type->return_type = (Sym)args;
-        symTable_addSym(cur);
-        global_curFunc_sym = cur;
-        symTable_addSymTable();
+        if (!func_sym)
+        {
+            Sym cur = makeSym(RD_FUNC, name);
+            cur->u.func_type->lineno = root->children[0]->lineno;
+            cur->u.func_type->return_type = (Sym)args;
+            cur->u.func_type->defined = !isInDeclare;
+            symTable_addSym(global, cur);
+            global_curFunc_sym = cur;
+            symTable_addSymTable();
+        }
+        else
+        {
+            isDeclared = 1;
+            global_curFunc_sym = func_sym;
+            symTable_addSymTable();
+            funccheck_param = func_sym->u.func_type->head;
+            ret = !typeSym_IsSame(func_sym->u.func_type->return_type, (Sym)args) || ret;
+            ret = ret || funccheck_param != NULL;
+            if (!isInDeclare && !func_sym->u.func_type->defined)
+            {
+                func_sym->u.func_type->defined = 1;
+            }
+            if (ret)
+            {
+                sprintf(tmpStr, "Inconsistent declaration of function \"%s\"", name);
+                semanticError(19, root->children[0]->lineno, tmpStr);
+            }
+            isDeclared = 0;
+        }
     }
     break;
 
@@ -546,6 +791,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_VarList_P:
     {
         ret = nameAnalysis(root->children[0], args);
+        ret = ret || funccheck_param != NULL;
     }
     break;
 
@@ -558,20 +804,39 @@ int nameAnalysis(struct ASTNode *root, void *args)
         ret = nameAnalysis(root->children[1], (void *)specifier) || ret;
         if (!ret)
         {
-            FuncType func_type = func_sym->u.func_type;
-            func_type->n_param++;
-
-            FuncParam param = makeFuncParam(global_curDef_sym);
-            if (!func_type->head)
+            if (!isDeclared)
             {
-                func_type->head = param;
+                FuncType func_type = func_sym->u.func_type;
+                func_type->n_param++;
+
+                FuncParam param = makeFuncParam(global_curDef_sym);
+                if (!func_type->head)
+                {
+                    func_type->head = param;
+                }
+                else
+                {
+                    FuncParam cur = func_type->head;
+                    while (cur->next)
+                        cur = cur->next;
+                    cur->next = param;
+                }
             }
             else
             {
-                FuncParam cur = func_type->head;
-                while (cur->next)
-                    cur = cur->next;
-                cur->next = param;
+                /*
+                if (funccheck_param != NULL)
+                {
+                    printSym(funccheck_param->type, "\n");
+                    printSym(global_curDef_sym->u.type_sym, "\n");
+                }
+                */
+                if (funccheck_param == NULL || !typeSym_IsSame(funccheck_param->type, global_curDef_sym->u.type_sym))
+                {
+                    ret = 1;
+                }
+                if (funccheck_param != NULL)
+                    funccheck_param = funccheck_param->next;
             }
         }
     }
@@ -608,6 +873,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Stmt_RES:
     {
         ret = nameAnalysis(root->children[1], NULL);
+        if (ret)
+            break;
         if (!typeSym_IsSame(global_curExp_typeSym, global_curFunc_sym->u.func_type->return_type))
         {
             ret = 1;
@@ -633,7 +900,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Stmt_ILERSES:
     {
         ret = nameAnalysis(root->children[2], NULL);
-        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        if (!global_curExp_typeSym || global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
         {
             ret = 1;
             sprintf(tmpStr, "Condition type mismatched for if, should be INT");
@@ -643,12 +910,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
         ret = nameAnalysis(root->children[6], NULL) || ret;
     }
     break;
-        //To do
 
     case SM_Stmt_WLERS:
     {
         ret = nameAnalysis(root->children[2], NULL);
-        if (global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        if (global_curExp_typeSym==NULL || global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
         {
             ret = 1;
             sprintf(tmpStr, "Condition type mismatched for while, should be INT");
@@ -827,11 +1093,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Exp_ILPARP:
     {
         char *name = root->children[0]->str_val;
-        Sym cur_func = symTable_find(name, RD_FUNC);
+        Sym cur_func = symTable_find(global, name, RD_FUNC);
         if (cur_func == NULL)
         {
             ret = 1;
-            Sym err11 = symTable_find(name, RD_VARIABLE);
+            Sym err11 = symTable_find(global, name, RD_VARIABLE);
             if (err11)
             {
                 sprintf(tmpStr, "\"%s\" is not a function", name);
@@ -845,8 +1111,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
+        FuncParam old=global_funcparam;
         global_funcparam = NULL;
-        ret = nameAnalysis(root->children[2], cur_func);
+        ret = nameAnalysis(root->children[2], cur_func) || ret;
+        global_funcparam=old;
         if (ret)
         {
             sprintf(tmpStr, "Function is not applicable for arguments");
@@ -854,15 +1122,16 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         global_curExp_typeSym = cur_func->u.func_type->return_type;
     }
+    break;
 
     case SM_Exp_ILPRP:
     {
         char *name = root->children[0]->str_val;
-        Sym cur_func = symTable_find(name, RD_FUNC);
+        Sym cur_func = symTable_find(global, name, RD_FUNC);
         if (cur_func == NULL)
         {
             ret = 1;
-            Sym err11 = symTable_find(name, RD_VARIABLE);
+            Sym err11 = symTable_find(global, name, RD_VARIABLE);
             if (err11)
             {
                 sprintf(tmpStr, "\"%s\" is not a function", name);
@@ -883,6 +1152,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             semanticError(9, root->children[2]->lineno, tmpStr);
         }
         global_curExp_typeSym = cur_func->u.func_type->return_type;
+        
     }
     break;
 
@@ -895,7 +1165,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             break;
         }
         Sym array_sym = global_curExp_typeSym;
-        if (array_sym->kind != RD_ARRAY)
+        if (array_sym->kind != RD_TYPE || array_sym->u.type->kind != RD_ARRAY)
         {
             ret = 1;
             sprintf(tmpStr, "\"%s\" is not an array", root->children[0]->str_val);
@@ -918,7 +1188,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        global_curExp_typeSym = array_sym->u.array_ty.type_sym;
+        global_curExp_typeSym = array_sym->u.type->u.array_ty.next;
+        if (global_curExp_typeSym == NULL)
+        {
+            global_curExp_typeSym = array_sym->u.type->u.array_ty.elem;
+        }
     }
     break;
 
@@ -941,7 +1215,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
 
         char *name = root->children[2]->str_val;
-        Sym field_sym = structType_findFeild(struct_sym,name);
+        Sym field_sym = structType_findFeild(struct_sym, name);
         if (field_sym == NULL)
         {
             ret = 1;
@@ -957,7 +1231,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Exp_ID:
     {
         char *name = root->children[0]->str_val;
-        Sym vari_sym = symTable_find(name, RD_VARIABLE);
+        Sym vari_sym = symTable_find(global, name, RD_VARIABLE);
         if (vari_sym == NULL)
         {
             ret = 1;
@@ -966,10 +1240,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        if(vari_sym->kind==RD_VARIABLE)
-            global_curExp_typeSym = vari_sym->u.type_sym;
-        if(vari_sym->kind==RD_ARRAY)
-            global_curExp_typeSym = vari_sym;
+        global_curExp_typeSym = vari_sym->u.type_sym;
     }
     break;
 
@@ -1026,6 +1297,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         ret = nameAnalysis(root->children[2], NULL) || ret;
     }
+    break;
 
     case SM_Args_E:
     {
@@ -1050,22 +1322,20 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         else
         {
-            if (global_funcparam->next == NULL)
-            {
-                ret = 1;
+            if(global_funcparam->next==NULL){
+                ret=1;
                 break;
             }
-            else
-            {
-                global_funcparam = global_funcparam->next;
-                cur = global_funcparam->type;
-            }
+            cur=global_funcparam->next->type;
+            global_funcparam=global_funcparam->next;
         }
+
         if (!typeSym_IsSame(left_sym, cur))
         {
             ret = 1;
             break;
         }
+
         if (global_funcparam->next)
         {
             ret = 1;
@@ -1076,7 +1346,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     default:
     {
-        printf("name Analysis : unimplemented error!\n");
+        printf("name Analysis : %d unimplemented error !\n", root->type);
         ret = 1;
     }
     break;

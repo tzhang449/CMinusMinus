@@ -3,6 +3,7 @@
 #include "ast.h"
 
 typedef struct Type_ *Type;
+
 typedef struct FieldList_ *FieldList;
 
 typedef struct FuncType_ *FuncType;
@@ -15,7 +16,9 @@ typedef struct SymTable_ *SymTable;
 enum TYPE_ENUM
 {
     RD_BASIC,
+    RD_ARRAY,
     RD_STRUCTURE
+
 };
 
 struct Type_
@@ -27,13 +30,23 @@ struct Type_
         enum BASIC_ENUM basic;
         // for struct type
         FieldList structure;
+        // Array
+        struct
+        {
+            Sym elem;
+            //type_sym of the next level array
+            Sym next;
+            int total_size;
+            int size;
+            int dim;
+        } array_ty;
     } u;
 };
 
 struct FieldList_
 {
     char *name;
-    Sym type_sym;
+    Sym sym;
     FieldList tail;
 };
 
@@ -42,6 +55,8 @@ struct FuncType_
     Sym return_type;
     int n_param;
     FuncParam head;
+    int defined;
+    int lineno;
 };
 
 struct FuncParam_
@@ -55,8 +70,9 @@ enum SYM_ENUM
 {
     RD_TYPE,
     RD_VARIABLE,
+
     RD_FUNC,
-    RD_ARRAY
+    RD_ARRAY_VARIABLE
 };
 
 struct Sym_
@@ -73,16 +89,7 @@ struct Sym_
         Sym type_sym;
         //FUNC
         FuncType func_type;
-        //ARRAY
-        struct
-        {
-            Sym type_sym;
-            int size;
-        } array_ty;
     } u;
-
-    //points to the AST node of the sym.
-    struct ASTNode *node;
 
     //next entry in sym table
     Sym next;

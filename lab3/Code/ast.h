@@ -8,6 +8,7 @@ enum NodeType
     SM_ExtDef_SES,
     SM_ExtDef_SS,
     SM_ExtDef_SFC,
+    SM_ExtDef_SFS,
     SM_ExtDecList_V,
     SM_ExtDecList_VCE,
     SM_Specifiers_T,
@@ -90,5 +91,7 @@ struct ASTNode
 struct ASTNode *newNode(char *name, int type, int lineno);
 
 void insert(struct ASTNode *root, struct ASTNode *child);
+
+void print_node(struct ASTNode *root);
 
 #endif

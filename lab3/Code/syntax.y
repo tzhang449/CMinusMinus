@@ -72,6 +72,12 @@ ExtDef : Specifier ExtDecList SEMI {
         insert($$,$1);
         insert($$,$2);
     }
+    | Specifier FunDec SEMI{
+        $$=newNode("ExtDef",SM_ExtDef_SFS,@$.first_line);
+        insert($$,$1);
+        insert($$,$2);
+        insert($$,$3); 
+    }
     | Specifier FunDec CompSt {
         $$=newNode("ExtDef",SM_ExtDef_SFC,@$.first_line);
         insert($$,$1);
