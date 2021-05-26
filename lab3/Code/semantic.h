@@ -93,6 +93,7 @@ struct Sym_
 
     //next entry in sym table
     Sym next;
+    int var_no;
 };
 
 struct SymTable_
@@ -113,4 +114,5 @@ SymTable makeSymTable();
 
 int nameAnalysis(struct ASTNode *root, void *args);
 void symTable_print(SymTable table);
+Sym symTable_find(SymTable table, char *name, enum SYM_ENUM kind);
 #endif

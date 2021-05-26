@@ -4,7 +4,6 @@
 
 #include "semantic.h"
 
-
 extern SymTable variables;
 SymTable global, globaltype;
 
@@ -229,7 +228,18 @@ void printSym(Sym sym, char *str)
         printSym(sym->u.type_sym, "");
     }
     break;
-    //to do
+
+    case RD_FUNC:
+    {
+        printf("%s(",sym->name);
+        FuncType func_type = sym->u.func_type;
+        FuncParam head=func_type->head;
+        while(head){
+            printSym(head->param,", ");
+            head=head->next;
+        }
+        printf(")");
+    }
     default:
         break;
     }
@@ -266,6 +276,7 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
     }
 
     ret->next = NULL;
+    ret->var_no=0;
     return ret;
 }
 
@@ -343,6 +354,12 @@ SymTable makeSymTable()
 
 void symTable_addSym(SymTable table, Sym sym)
 {
+    if (table == global && !isInStruct)
+    {
+        Sym dup = (Sym)malloc(sizeof(struct Sym_));
+        memcpy(dup, sym, sizeof(struct Sym_));
+        symTable_addSym(variables, dup);
+    }
     if (!table->head)
     {
         table->head = sym;
@@ -353,8 +370,6 @@ void symTable_addSym(SymTable table, Sym sym)
     while (cur->next)
         cur = cur->next;
     cur->next = sym;
-    if(table==global)
-        symTable_addSym(variables,sym);
 }
 
 void symTable_addSymTable()
@@ -380,7 +395,7 @@ void symTable_print(SymTable table)
     printf("table content:\n");
     while (head)
     {
-        printSym(head,"\n");
+        printSym(head, "\n");
         head = head->next;
     }
 }
@@ -496,6 +511,20 @@ int nameAnalysis(struct ASTNode *root, void *args)
         fillBasicType(sym_float->u.type, RD_FLOAT);
 
         globaltype = makeSymTable();
+        
+        Sym read=makeSym(RD_FUNC, "read");
+        read->u.func_type->return_type = sym_int;
+        read->u.func_type->defined = 1;
+        symTable_addSym(globaltype, read);
+        
+        Sym write=makeSym(RD_FUNC, "write");
+        write->u.func_type->return_type = sym_int;
+        write->u.func_type->defined = 1;
+        Sym write_v=makeSym(RD_VARIABLE,"foo");
+        write_v->u.type_sym=sym_int;
+        write->u.func_type->head=makeFuncParam(write_v);
+        symTable_addSym(globaltype, write);
+
         global = makeSymTable();
         variables = makeSymTable();
         ret = nameAnalysis(root->children[0], NULL);
@@ -564,7 +593,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
     case SM_Specifiers_T:
     {
-        if(!args)
+        if (!args)
             break;
         switch (root->children[0]->type_val)
         {
@@ -696,6 +725,13 @@ int nameAnalysis(struct ASTNode *root, void *args)
             cur = global_curDef_sym;
             addArrayType(cur->u.type_sym->u.type, root->children[2]->int_val);
         }
+        if(!isInStruct){
+            Sym head=variables->head;
+            while(head->next){
+                head=head->next;
+            }
+            memcpy(head,cur,sizeof(struct Sym_));
+        }
         global_curDef_sym = cur;
     }
     break;
@@ -717,7 +753,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             cur->u.func_type->lineno = root->children[0]->lineno;
             cur->u.func_type->return_type = (Sym)args;
             cur->u.func_type->defined = !isInDeclare;
-            symTable_addSym(global, cur);
+            symTable_addSym(globaltype, cur);
             global_curFunc_sym = cur;
             symTable_addSymTable();
             ret = nameAnalysis(root->children[2], cur) || ret;
@@ -761,7 +797,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
             cur->u.func_type->lineno = root->children[0]->lineno;
             cur->u.func_type->return_type = (Sym)args;
             cur->u.func_type->defined = !isInDeclare;
-            symTable_addSym(global, cur);
+            symTable_addSym(globaltype, cur);
             global_curFunc_sym = cur;
             symTable_addSymTable();
         }
@@ -920,7 +956,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Stmt_WLERS:
     {
         ret = nameAnalysis(root->children[2], NULL);
-        if (global_curExp_typeSym==NULL || global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
+        if (global_curExp_typeSym == NULL || global_curExp_typeSym->u.type->kind != RD_BASIC || global_curExp_typeSym->u.type->u.basic != RD_INT)
         {
             ret = 1;
             sprintf(tmpStr, "Condition type mismatched for while, should be INT");
@@ -1099,11 +1135,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Exp_ILPARP:
     {
         char *name = root->children[0]->str_val;
-        Sym cur_func = symTable_find(global, name, RD_FUNC);
+        Sym cur_func = symTable_find(globaltype, name, RD_FUNC);
         if (cur_func == NULL)
         {
             ret = 1;
-            Sym err11 = symTable_find(global, name, RD_VARIABLE);
+            Sym err11 = symTable_find(globaltype, name, RD_VARIABLE);
             if (err11)
             {
                 sprintf(tmpStr, "\"%s\" is not a function", name);
@@ -1117,10 +1153,10 @@ int nameAnalysis(struct ASTNode *root, void *args)
             global_curExp_typeSym = NULL;
             break;
         }
-        FuncParam old=global_funcparam;
+        FuncParam old = global_funcparam;
         global_funcparam = NULL;
         ret = nameAnalysis(root->children[2], cur_func) || ret;
-        global_funcparam=old;
+        global_funcparam = old;
         if (ret)
         {
             sprintf(tmpStr, "Function is not applicable for arguments");
@@ -1133,11 +1169,11 @@ int nameAnalysis(struct ASTNode *root, void *args)
     case SM_Exp_ILPRP:
     {
         char *name = root->children[0]->str_val;
-        Sym cur_func = symTable_find(global, name, RD_FUNC);
+        Sym cur_func = symTable_find(globaltype, name, RD_FUNC);
         if (cur_func == NULL)
         {
             ret = 1;
-            Sym err11 = symTable_find(global, name, RD_VARIABLE);
+            Sym err11 = symTable_find(globaltype, name, RD_VARIABLE);
             if (err11)
             {
                 sprintf(tmpStr, "\"%s\" is not a function", name);
@@ -1158,7 +1194,6 @@ int nameAnalysis(struct ASTNode *root, void *args)
             semanticError(9, root->children[2]->lineno, tmpStr);
         }
         global_curExp_typeSym = cur_func->u.func_type->return_type;
-        
     }
     break;
 
@@ -1328,12 +1363,13 @@ int nameAnalysis(struct ASTNode *root, void *args)
         }
         else
         {
-            if(global_funcparam->next==NULL){
-                ret=1;
+            if (global_funcparam->next == NULL)
+            {
+                ret = 1;
                 break;
             }
-            cur=global_funcparam->next->type;
-            global_funcparam=global_funcparam->next;
+            cur = global_funcparam->next->type;
+            global_funcparam = global_funcparam->next;
         }
 
         if (!typeSym_IsSame(left_sym, cur))

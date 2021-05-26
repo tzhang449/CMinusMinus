@@ -23,10 +23,17 @@ struct InterCode
 {
     enum
     {
+        CG_FUNCNAME,
+        CG_PARAMDEC,
+        CG_RETURN,
+        CG_LABEL,
+        CG_GOTO,
+
         CG_ASSIGN,
         CG_ADD,
         CG_SUB,
-        CG_MUL
+        CG_MUL,
+        CG_DIV
     } kind;
     union
     {
@@ -38,17 +45,26 @@ struct InterCode
         {
             Operand result, op1, op2;
         } binop;
+        Operand ret;
+        int var_no;
+        int label_no;
+        char *name;
     } u;
 };
 
 struct InterCodes{
     struct InterCode code;
-    struct InterCode* pre;
-    struct InterCode* next;
+    struct InterCodes* pre;
+    struct InterCodes* next;
+    struct InterCodes* end;
 };
 
-void codeGen(struct ASTNode *root);
-void codeGen_ExtDefList(struct ASTNode* root);
-void codeGen_ExtDef(struct ASTNode* root);
-void codeGen_CompSt(struct ASTNode* root);
+
+struct InterCodes* codeGen(struct ASTNode *root);
+struct InterCodes* codeGen_ExtDefList(struct ASTNode* root);
+struct InterCodes* codeGen_ExtDef(struct ASTNode* root);
+struct InterCodes* codeGen_CompSt(struct ASTNode* root);
+struct InterCodes* codeGen_StmtList(struct ASTNode* root);
+struct InterCodes* codeGen_Stmt(struct ASTNode* root);
+struct InterCodes* codeGen_Exp(struct ASTNode *root, Operand place);
 #endif
