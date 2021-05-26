@@ -112,5 +112,5 @@ SymTable makeSymTable();
 */
 
 int nameAnalysis(struct ASTNode *root, void *args);
-
+void symTable_print(SymTable table);
 #endif

@@ -4,6 +4,8 @@
 
 #include "semantic.h"
 
+
+extern SymTable variables;
 SymTable global, globaltype;
 
 Sym sym_int, sym_float, global_curDef_sym, global_curFunc_sym, global_curExp_typeSym;
@@ -152,6 +154,7 @@ FuncType makeFuncType()
 
 void printSym(Sym sym, char *str)
 {
+
     static int indent = 0;
     if (sym == NULL)
         return;
@@ -350,6 +353,8 @@ void symTable_addSym(SymTable table, Sym sym)
     while (cur->next)
         cur = cur->next;
     cur->next = sym;
+    if(table==global)
+        symTable_addSym(variables,sym);
 }
 
 void symTable_addSymTable()
@@ -375,7 +380,7 @@ void symTable_print(SymTable table)
     printf("table content:\n");
     while (head)
     {
-        printf("  (%s)\n", head->name);
+        printSym(head,"\n");
         head = head->next;
     }
 }
@@ -492,6 +497,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
 
         globaltype = makeSymTable();
         global = makeSymTable();
+        variables = makeSymTable();
         ret = nameAnalysis(root->children[0], NULL);
         ret = checkUndefinedFunc();
     }

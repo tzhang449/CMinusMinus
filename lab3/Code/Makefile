@@ -21,7 +21,7 @@ run: parser
 	./parser test.cmm
 	
 gdb: clean debug_compile
-	gdb --args parser test.cmm
+	gdb --args parser tests/2020-B_1.cmm 
 
 debug: clean debug_compile
 	./parser test.cmm

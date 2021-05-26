@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "semantic.h"
+#include "codegen.h"
 
 extern int yyrestart();
 extern int yyparse();
@@ -28,11 +29,12 @@ int main(int argc, char **argv)
     if(hasError)
         return 0;
     //print_node(root);
-
     if(nameAnalysis(root,NULL)){
         //error
         return 0;
     }
+
+    codeGen(root);
 
 
     return 0;
