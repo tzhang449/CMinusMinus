@@ -17,6 +17,8 @@ void print_operand(Operand v, FILE *file)
     switch (v->kind)
     {
     case CG_VARIABLE:
+    case CG_ADDRESS:
+    case CG_PARAM:
         fprintf(file, "%s%d", v->u.var_no > 0 ? "t" : "v", abs(v->u.var_no));
         break;
 
@@ -113,6 +115,25 @@ void print_code(struct InterCode code, char *str, FILE *file)
         fprintf(file, " := CALL %s", code.u.func_call.name);
         break;
 
+    case CG_ADDRASSIGN:
+        print_operand(code.u.assign.left, file);
+        fprintf(file, " := &");
+        print_operand(code.u.assign.right, file);
+        break;
+    case CG_ASSIGN_DEREFER:
+        print_operand(code.u.assign.left, file);
+        fprintf(file, " := *");
+        print_operand(code.u.assign.right, file);
+        break;
+    case CG_ASSIGN_TOADDR:
+        fprintf(file, "*");
+        print_operand(code.u.assign.left, file);
+        fprintf(file, " := ");
+        print_operand(code.u.assign.right, file);
+        break;
+    case CG_MALLOC:
+        fprintf(file, "DEC v%d %d", abs(code.u.malloc.var_no), code.u.malloc.size);
+        break;
     //to do
     default:
         assert(0);
@@ -209,7 +230,7 @@ struct InterCodes *gen_func(char *name)
     FuncParam func_param = func_sym->u.func_type->head;
     while (func_param)
     {
-        if (func_param->param->kind == RD_VARIABLE)
+        if (func_param->param->kind == RD_VARIABLE || func_param->param->kind == RD_ARRAY_VARIABLE)
         {
             struct InterCodes *tmp = new_codes();
             tmp->code.kind = CG_PARAMDEC;
@@ -393,6 +414,45 @@ struct InterCodes *gen_call(Operand place, char *name)
     return ret;
 }
 
+struct InterCodes *gen_addrAssign(Operand left, Operand right)
+{
+    assert(left->kind !=CG_VARIABLE && right->kind == CG_VARIABLE);
+    struct InterCodes *ret = new_codes();
+    ret->code.kind = CG_ADDRASSIGN;
+    ret->code.u.assign.left = left;
+    ret->code.u.assign.right = right;
+    return ret;
+}
+
+struct InterCodes *gen_assignToAddr(Operand left, Operand right)
+{
+    assert(left->kind == CG_ADDRESS);
+    struct InterCodes *ret = new_codes();
+    ret->code.kind = CG_ASSIGN_TOADDR;
+    ret->code.u.assign.left = left;
+    ret->code.u.assign.right = right;
+    return ret;
+}
+
+struct InterCodes *gen_assignDereference(Operand left, Operand right)
+{
+    //assert(left->kind == CG_VARIABLE && right->kind != CG_VARIABLE);
+    struct InterCodes *ret = new_codes();
+    ret->code.kind = CG_ASSIGN_DEREFER;
+    ret->code.u.assign.left = left;
+    ret->code.u.assign.right = right;
+    return ret;
+}
+
+struct InterCodes *gen_malloc(int var_no, int size)
+{
+    struct InterCodes *codes = new_codes();
+    codes->code.kind = CG_MALLOC;
+    codes->code.u.malloc.size = size;
+    codes->code.u.malloc.var_no = var_no;
+    return codes;
+}
+
 struct InterCodes *codeGen(struct ASTNode *root)
 {
     printf("############################\n");
@@ -431,6 +491,7 @@ struct InterCodes *codeGen_ExtDef(struct ASTNode *root)
     break;
 
     default:
+        return NULL;
         break;
     }
 }
@@ -475,20 +536,46 @@ struct InterCodes *codeGen_DecList(struct ASTNode *root)
 struct InterCodes *codeGen_Dec(struct ASTNode *root)
 {
     if (root->type == SM_Dec_V)
+    {
+        return codeGen_VarDec(root->children[0]);
+    }
+    else
+    {
+        assert(root->children[0]->type == SM_VarDec_I);
+        Sym v_sym = symTable_find(variables, root->children[0]->children[0]->str_val, RD_VARIABLE);
+        v_sym->var_no = new_tmp();
+        Operand left = new_operand(CG_VARIABLE);
+        left->u.var_no = v_sym->var_no;
+
+        Operand place = new_operand(CG_VARIABLE);
+        place->u.var_no = new_tmp();
+        struct InterCodes *exp_codes = codeGen_Exp(root->children[2], place);
+
+        struct InterCodes *assign_codes = gen_assign(left, place);
+        exp_codes = concat_codes(exp_codes, assign_codes);
+    }
+}
+
+struct InterCodes *codeGen_VarDec(struct ASTNode *root)
+{
+    if (root->type == SM_VarDec_I)
+    {
+        Sym v = symTable_find(variables, root->children[0]->str_val, RD_VARIABLE);
+        if (v->u.type_sym->u.type->kind == RD_STRUCTURE)
+        {
+            v->var_no = new_param();
+            return gen_malloc(v->var_no, v->u.type_sym->u.type->size);
+        }
         return NULL;
-
-    assert(root->children[0]->type == SM_VarDec_I);
-    Sym v_sym = symTable_find(variables, root->children[0]->children[0]->str_val, RD_VARIABLE);
-    v_sym->var_no = new_tmp();
-    Operand left = new_operand(CG_VARIABLE);
-    left->u.var_no = v_sym->var_no;
-
-    Operand place = new_operand(CG_VARIABLE);
-    place->u.var_no = new_tmp();
-    struct InterCodes *exp_codes = codeGen_Exp(root->children[2], place);
-
-    struct InterCodes *assign_codes = gen_assign(left, place);
-    exp_codes = concat_codes(exp_codes, assign_codes);
+    }
+    else
+    {
+        while (root->type == SM_VarDec_VLIR)
+            root = root->children[0];
+        Sym v = symTable_find(variables, root->children[0]->str_val, RD_VARIABLE);
+        v->var_no = new_param();
+        return gen_malloc(v->var_no, v->u.type_sym->u.type->size);
+    }
 }
 
 struct InterCodes *codeGen_StmtList(struct ASTNode *root)
@@ -632,7 +719,15 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
             }
             Operand right = new_operand(CG_VARIABLE);
             right->u.var_no = v->var_no;
-            return gen_assign(place, right);
+            place->u.addr.type_sym = v->u.type_sym;
+            if (v->isparam || v->u.type_sym->u.type->kind == RD_BASIC)
+            {
+                return gen_assign(place, right);
+            }
+            else
+            {
+                return gen_addrAssign(place, right);
+            }
         }
         else
         {
@@ -650,7 +745,7 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
 
     case SM_Exp_ASSIGN:
     {
-        if (root->children[0]->type = SM_Exp_ID)
+        if (root->children[0]->type == SM_Exp_ID)
         {
             Operand left = new_operand(CG_VARIABLE);
             Sym v = symTable_find(variables, root->children[0]->children[0]->str_val, RD_VARIABLE);
@@ -663,11 +758,39 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
             struct InterCodes *right_code = codeGen_Exp(root->children[2], right);
             struct InterCodes *assign_code = gen_assign(left, right);
             right_code = concat_codes(right_code, assign_code);
+
+            if (place)
+            {
+                right_code = concat_codes(right_code, gen_assign(place, left));
+            }
             return right_code;
         }
         else
         {
-            assert(0);
+            Operand left = new_operand(CG_ADDRESS);
+            struct InterCodes *left_codes = codeGen_Exp(root->children[0], left);
+
+            switch (left->u.addr.type_sym->u.type->kind)
+            {
+            case RD_ARRAY:
+                //to do
+                assert(0);
+                break;
+            case RD_BASIC:
+            {
+                Operand right = new_operand(CG_VARIABLE);
+                right->u.var_no = new_tmp();
+                struct InterCodes *right_codes = codeGen_Exp(root->children[2], right);
+                struct InterCodes *assign_codes = gen_assignToAddr(left, right);
+                left_codes = concat_codes(left_codes, right_codes);
+                left_codes = concat_codes(left_codes, assign_codes);
+                return left_codes;
+            }
+            break;
+            default:
+                assert(0);
+                break;
+            }
             //to do!!!
         }
     }
@@ -796,6 +919,86 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
         }
     }
     break;
+
+    case SM_Exp_ELBERB:
+    {
+        Operand left = new_operand(CG_ADDRESS);
+        left->u.addr.var_no = new_tmp();
+        struct InterCodes *left_codes = codeGen_Exp(root->children[0], left);
+
+        Operand right = new_operand(CG_VARIABLE);
+        right->u.var_no = new_tmp();
+        struct InterCodes *right_codes = codeGen_Exp(root->children[2], right);
+        left_codes = concat_codes(left_codes, right_codes);
+
+        Operand offset = new_operand(CG_VARIABLE);
+        offset->u.var_no = new_tmp();
+        Operand size = new_operand(CG_CONSTANT);
+        Sym next_sym = left->u.addr.type_sym->u.type->u.array_ty.next;
+        if (next_sym)
+        {
+            size->u.value = next_sym->u.type->size;
+        }
+        else
+        {
+            size->u.value = left->u.addr.type_sym->u.type->u.array_ty.elem->u.type->size;
+        }
+        left_codes = concat_codes(left_codes, gen_arith(offset, right, size, CG_MUL));
+
+        struct InterCodes *addr_codes = gen_arith(left, left, offset, CG_ADD);
+        left_codes = concat_codes(left_codes, addr_codes);
+
+        struct InterCodes *derefernce_codes = NULL;
+        if (place->kind == CG_VARIABLE || (place->kind == CG_PARAM && left->u.addr.type_sym->u.type->u.array_ty.next == NULL && left->u.addr.type_sym->u.type->u.array_ty.elem->u.type->kind == RD_BASIC))
+        {
+            //right value
+            derefernce_codes = gen_assignDereference(place, left);
+        }
+        else
+        {
+            destroy_tmp(place->u.addr.var_no);
+            place->u.addr.var_no = left->u.addr.var_no;
+            place->u.addr.type_sym = left->u.addr.type_sym->u.type->u.array_ty.next;
+            if (place->u.addr.type_sym == NULL)
+            {
+                place->u.addr.type_sym = left->u.addr.type_sym->u.type->u.array_ty.elem;
+            }
+        }
+        left_codes = concat_codes(left_codes, derefernce_codes);
+    }
+    break;
+
+    case SM_Exp_EDI:
+    {
+        Operand left = new_operand(CG_ADDRESS);
+        left->u.addr.var_no = new_tmp();
+        struct InterCodes *left_codes = codeGen_Exp(root->children[0], left);
+        FieldList field = structType_findFeild_retfield(left->u.addr.type_sym, root->children[2]->str_val);
+
+        struct InterCodes *addr_codes = NULL;
+        if (field->offset > 0)
+        {
+            Operand offset = new_operand(CG_CONSTANT);
+            offset->u.value = field->offset;
+            addr_codes = gen_arith(left, left, offset, CG_ADD);
+        }
+        struct InterCodes *derefernce_codes = NULL;
+        if (place->kind == CG_VARIABLE || (place->kind == CG_PARAM && field->sym->u.type_sym->u.type->kind == RD_BASIC))
+        {
+            //right value
+            derefernce_codes = gen_assignDereference(place, left);
+        }
+        else
+        {
+            destroy_tmp(place->u.addr.var_no);
+            place->u.addr.var_no = left->u.addr.var_no;
+            place->u.addr.type_sym = field->sym->u.type_sym;
+        }
+        left_codes = concat_codes(left_codes, addr_codes);
+        left_codes = concat_codes(left_codes, derefernce_codes);
+        return left_codes;
+    }
+    break;
     //to do
     default:
         assert(0);
@@ -809,17 +1012,16 @@ struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i)
     {
     case SM_Args_ECA:
     {
-        /*
-            t1 = new_temp()
-            code1 = translate_Exp(Exp, sym_table, t1)
-            arg_list = t1 + arg_list
-            code2 = translate_Args(Args1, sym_table, arg_list)
-            return code1 + code2
-        */
-        Operand place = new_operand(CG_VARIABLE);
+        if (root->children[0]->type == SM_Exp_ELBERB)
+        {
+            //to do!
+            assert(0);
+        }
+        Operand place = new_operand(CG_PARAM);
         place->u.var_no = new_tmp();
         struct InterCodes *exp_codes = codeGen_Exp(root->children[0], place);
         arg_list[i] = place;
+
         struct InterCodes *args_codes = codeGen_Args(root->children[2], arg_list, i + 1);
         exp_codes = concat_codes(exp_codes, args_codes);
         return exp_codes;
@@ -828,7 +1030,7 @@ struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i)
 
     case SM_Args_E:
     {
-        Operand place = new_operand(CG_VARIABLE);
+        Operand place = new_operand(CG_PARAM);
         place->u.var_no = new_tmp();
         struct InterCodes *exp_codes = codeGen_Exp(root->children[0], place);
         arg_list[i] = place;

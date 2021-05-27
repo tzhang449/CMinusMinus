@@ -1,7 +1,7 @@
 #ifndef _SEMANTIC_H_
 #define _SEMANTIC_H_
 #include "ast.h"
-
+#include "assert.h"
 typedef struct Type_ *Type;
 
 typedef struct FieldList_ *FieldList;
@@ -96,6 +96,7 @@ struct Sym_
     //next entry in sym table
     Sym next;
     int var_no;
+    int isparam;
 };
 
 struct SymTable_
@@ -117,4 +118,6 @@ SymTable makeSymTable();
 int nameAnalysis(struct ASTNode *root, void *args);
 void symTable_print(SymTable table);
 Sym symTable_find(SymTable table, char *name, enum SYM_ENUM kind);
+FieldList structType_findFeild_retfield(Sym struct_sym, char *name);
+void printSym(Sym sym,char*str);
 #endif

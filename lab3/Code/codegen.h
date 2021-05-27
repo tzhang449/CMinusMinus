@@ -11,12 +11,17 @@ struct Operand_
     {
         CG_VARIABLE,
         CG_CONSTANT,
-        CG_ADDRESS
+        CG_ADDRESS,
+        CG_PARAM
     } kind;
     union
     {
         int var_no;
         int value;
+        struct{
+            int var_no;
+            Sym type_sym;
+        } addr;
     } u;
 };
 
@@ -40,8 +45,12 @@ struct InterCode
         CG_READ,
         CG_WRITE,
         CG_CALL,
-        CG_ARG
+        CG_ARG,
 
+        CG_ADDRASSIGN,
+        CG_ASSIGN_DEREFER,
+        CG_ASSIGN_TOADDR,
+        CG_MALLOC
     } kind;
     union
     {
@@ -64,7 +73,10 @@ struct InterCode
             Operand place;
             char *name;
         } func_call;
-
+        struct{
+            int var_no;
+            int size;
+        } malloc;
         Operand ret;
         Operand arg;
         int var_no;
@@ -94,4 +106,5 @@ struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i);
 struct InterCodes *codeGen_DefList(struct ASTNode *root);
 struct InterCodes *codeGen_DecList(struct ASTNode *root);
 struct InterCodes *codeGen_Dec(struct ASTNode *root);
+struct InterCodes *codeGen_VarDec(struct ASTNode *root);
 #endif

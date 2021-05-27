@@ -49,7 +49,7 @@ void fillBasicType(Type type, enum TYPE_ENUM basic)
 {
     type->kind = RD_BASIC;
     type->u.basic = basic;
-    type->size=4;
+    type->size = 4;
 }
 
 void initStructType(Type type)
@@ -66,6 +66,7 @@ void initArrayType(Type array_type, Sym type_sym, int dim_size)
     array_type->u.array_ty.next = NULL;
     array_type->u.array_ty.size = dim_size;
     array_type->u.array_ty.total_size = dim_size;
+    array_type->size=type_sym->u.type->size*dim_size;
 }
 
 void addArrayType(Type array_type, int dim_size)
@@ -81,7 +82,7 @@ void addArrayType(Type array_type, int dim_size)
     }
     array_type->u.array_ty.dim = array_type->u.array_ty.next->u.type->u.array_ty.dim + 1;
     array_type->u.array_ty.total_size = array_type->u.array_ty.next->u.type->u.array_ty.total_size * array_type->u.array_ty.size;
-    array_type->size=array_type->u.array_ty.total_size;
+    array_type->size = array_type->u.array_ty.total_size * array_type->u.array_ty.elem->u.type->size;
 }
 
 FieldList makeFieldList(Sym sym, int offset)
@@ -141,6 +142,24 @@ Sym structType_findFeild(Sym struct_sym, char *name)
     return NULL;
 }
 
+FieldList structType_findFeild_retfield(Sym struct_sym, char *name)
+{
+    assert(struct_sym->kind==RD_TYPE);
+    if (name == NULL)
+        return NULL;
+    Type stype = struct_sym->u.type;
+    FieldList cur = stype->u.structure;
+    while (cur)
+    {
+        if (cur->name && strcmp(cur->name, name) == 0)
+        {
+            return cur;
+        }
+        cur = cur->tail;
+    }
+    return NULL;
+}
+
 FuncParam makeFuncParam(Sym sym)
 {
     FuncParam ret = (FuncParam)malloc(sizeof(struct FuncParam_));
@@ -180,7 +199,8 @@ void printSym(Sym sym, char *str)
                 {
                     printf(" ");
                 }
-                printSym(cur->sym, ";\n");
+                printSym(cur->sym, "");
+                printf("{offset: %d}\n", cur->offset);
                 cur = cur->tail;
             }
             indent -= 2;
@@ -188,7 +208,7 @@ void printSym(Sym sym, char *str)
             {
                 printf(" ");
             }
-            printf("}");
+            printf("} {size: %d}", sym->u.type->size);
         }
         break;
 
@@ -233,6 +253,7 @@ void printSym(Sym sym, char *str)
         printSym(sym->u.type_sym->u.type->u.array_ty.elem, " ");
         printf("%s", sym->name);
         printSym(sym->u.type_sym, "");
+        printf(" {size: %d}",sym->u.type_sym->u.type->size);
     }
     break;
 
@@ -860,7 +881,8 @@ int nameAnalysis(struct ASTNode *root, void *args)
             {
                 FuncType func_type = func_sym->u.func_type;
                 func_type->n_param++;
-
+                Sym sym=symTable_find(variables,global_curDef_sym->name,RD_VARIABLE);
+                sym->isparam=1;
                 FuncParam param = makeFuncParam(global_curDef_sym);
                 if (!func_type->head)
                 {
