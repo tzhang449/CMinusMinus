@@ -46,7 +46,7 @@ void print_code(struct InterCode code, char *str, FILE *file)
         print_operand(code.u.ret, file);
         break;
     case CG_LABEL:
-        fprintf(file, "LABEL label%d:", code.u.label_no);
+        fprintf(file, "LABEL label%d :", code.u.label_no);
         break;
     case CG_GOTO:
         fprintf(file, "GOTO label%d", code.u.label_no);
@@ -96,6 +96,16 @@ void print_code(struct InterCode code, char *str, FILE *file)
     case CG_READ:
         fprintf(file, "READ ");
         print_operand(code.u.func_call.place, file);
+        break;
+
+    case CG_WRITE:
+        fprintf(file, "WRITE ");
+        print_operand(code.u.func_call.place, file);
+        break;
+
+    case CG_ARG:
+        fprintf(file, "ARG ");
+        print_operand(code.u.arg, file);
         break;
 
     case CG_CALL:
@@ -349,6 +359,23 @@ struct InterCodes *gen_read(Operand place)
         destroy_tmp(place->u.var_no);
     }
     ret->code.u.func_call.place = place;
+    return ret;
+}
+
+struct InterCodes *gen_write(Operand place)
+{
+    struct InterCodes *ret = new_codes();
+    ret->code.kind = CG_WRITE;
+    ret->code.u.func_call.place = place;
+    return ret;
+}
+
+struct InterCodes *gen_arg(Operand arg)
+{
+    struct InterCodes *ret = new_codes();
+    ret->code.kind = CG_ARG;
+    ret->code.u.arg = arg;
+    return ret;
 }
 
 struct InterCodes *gen_call(Operand place, char *name)
@@ -363,6 +390,7 @@ struct InterCodes *gen_call(Operand place, char *name)
         destroy_tmp(place->u.var_no);
     }
     ret->code.u.func_call.place = place;
+    return ret;
 }
 
 struct InterCodes *codeGen(struct ASTNode *root)
@@ -409,7 +437,58 @@ struct InterCodes *codeGen_ExtDef(struct ASTNode *root)
 
 struct InterCodes *codeGen_CompSt(struct ASTNode *root)
 {
-    return codeGen_StmtList(root->children[2]);
+    struct InterCodes *compst = codeGen_DefList(root->children[1]);
+    compst = concat_codes(compst, codeGen_StmtList(root->children[2]));
+    return compst;
+}
+
+struct InterCodes *codeGen_DefList(struct ASTNode *root)
+{
+    if (!root)
+        return NULL;
+    struct InterCodes *deflist = codeGen_DecList(root->children[0]->children[1]);
+    deflist = concat_codes(deflist, codeGen_DefList(root->children[1]));
+    return deflist;
+};
+
+struct InterCodes *codeGen_DecList(struct ASTNode *root)
+{
+    switch (root->type)
+    {
+    case SM_DecList_D:
+    {
+        return codeGen_Dec(root->children[0]);
+    }
+    break;
+    case SM_DecList_DCD:
+    {
+        struct InterCodes *declist = codeGen_Dec(root->children[0]);
+        declist = concat_codes(declist, codeGen_DecList(root->children[2]));
+    }
+    break;
+    default:
+        assert(0);
+        break;
+    }
+}
+
+struct InterCodes *codeGen_Dec(struct ASTNode *root)
+{
+    if (root->type == SM_Dec_V)
+        return NULL;
+
+    assert(root->children[0]->type == SM_VarDec_I);
+    Sym v_sym = symTable_find(variables, root->children[0]->children[0]->str_val, RD_VARIABLE);
+    v_sym->var_no = new_tmp();
+    Operand left = new_operand(CG_VARIABLE);
+    left->u.var_no = v_sym->var_no;
+
+    Operand place = new_operand(CG_VARIABLE);
+    place->u.var_no = new_tmp();
+    struct InterCodes *exp_codes = codeGen_Exp(root->children[2], place);
+
+    struct InterCodes *assign_codes = gen_assign(left, place);
+    exp_codes = concat_codes(exp_codes, assign_codes);
 }
 
 struct InterCodes *codeGen_StmtList(struct ASTNode *root)
@@ -694,12 +773,69 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
     case SM_Exp_ILPARP:
     {
         char *func_name = root->children[0]->str_val;
-        Sym func_sym=symTable_find(globaltype,func_name,RD_FUNC);
-        
-        struct InterCodes* args_codes=codeGen_Args(root->children[2],arg_list);
+        Sym func_sym = symTable_find(globaltype, func_name, RD_FUNC);
+        Operand *arg_list = (Operand *)malloc(sizeof(struct Operand_) * func_sym->u.func_type->n_param);
+        struct InterCodes *genargs_codes = codeGen_Args(root->children[2], arg_list, 0);
+        if (strcmp(func_name, "write") == 0)
+        {
+            struct InterCodes *write_codes = gen_write(arg_list[0]);
+            genargs_codes = concat_codes(genargs_codes, write_codes);
+            if (place)
+                genargs_codes = concat_codes(genargs_codes, gen_assign(place, zero));
+            return genargs_codes;
+        }
+        else
+        {
+            for (int i = func_sym->u.func_type->n_param - 1; i >= 0; i--)
+            {
+                struct InterCodes *arg_codes = gen_arg(arg_list[i]);
+                genargs_codes = concat_codes(genargs_codes, arg_codes);
+            }
+            genargs_codes = concat_codes(genargs_codes, gen_call(place, func_name));
+            return genargs_codes;
+        }
     }
     break;
     //to do
+    default:
+        assert(0);
+        break;
+    }
+}
+
+struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i)
+{
+    switch (root->type)
+    {
+    case SM_Args_ECA:
+    {
+        /*
+            t1 = new_temp()
+            code1 = translate_Exp(Exp, sym_table, t1)
+            arg_list = t1 + arg_list
+            code2 = translate_Args(Args1, sym_table, arg_list)
+            return code1 + code2
+        */
+        Operand place = new_operand(CG_VARIABLE);
+        place->u.var_no = new_tmp();
+        struct InterCodes *exp_codes = codeGen_Exp(root->children[0], place);
+        arg_list[i] = place;
+        struct InterCodes *args_codes = codeGen_Args(root->children[2], arg_list, i + 1);
+        exp_codes = concat_codes(exp_codes, args_codes);
+        return exp_codes;
+    }
+    break;
+
+    case SM_Args_E:
+    {
+        Operand place = new_operand(CG_VARIABLE);
+        place->u.var_no = new_tmp();
+        struct InterCodes *exp_codes = codeGen_Exp(root->children[0], place);
+        arg_list[i] = place;
+        return exp_codes;
+    }
+    break;
+
     default:
         assert(0);
         break;

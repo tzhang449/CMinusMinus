@@ -41,6 +41,7 @@ struct Type_
             int dim;
         } array_ty;
     } u;
+    int size;
 };
 
 struct FieldList_
@@ -48,6 +49,7 @@ struct FieldList_
     char *name;
     Sym sym;
     FieldList tail;
+    int offset;
 };
 
 struct FuncType_

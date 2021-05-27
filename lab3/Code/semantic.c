@@ -40,13 +40,16 @@ Sym makeSym(enum SYM_ENUM kind, char *name);
 
 Type makeType()
 {
-    return (Type)malloc(sizeof(struct Type_));
+    Type ret = (Type)malloc(sizeof(struct Type_));
+    ret->size = 0;
+    return ret;
 }
 
 void fillBasicType(Type type, enum TYPE_ENUM basic)
 {
     type->kind = RD_BASIC;
     type->u.basic = basic;
+    type->size=4;
 }
 
 void initStructType(Type type)
@@ -78,21 +81,24 @@ void addArrayType(Type array_type, int dim_size)
     }
     array_type->u.array_ty.dim = array_type->u.array_ty.next->u.type->u.array_ty.dim + 1;
     array_type->u.array_ty.total_size = array_type->u.array_ty.next->u.type->u.array_ty.total_size * array_type->u.array_ty.size;
+    array_type->size=array_type->u.array_ty.total_size;
 }
 
-FieldList makeFieldList(Sym sym)
+FieldList makeFieldList(Sym sym, int offset)
 {
     FieldList ret = (FieldList)malloc(sizeof(struct FieldList_));
     ret->name = sym->name;
     ret->sym = sym;
     ret->tail = NULL;
+    ret->offset = offset;
 }
 
 void structType_addSym(Type stype, Sym sym)
 {
     if (!stype->u.structure)
     {
-        stype->u.structure = makeFieldList(sym);
+        stype->u.structure = makeFieldList(sym, stype->size);
+        stype->size += sym->u.type_sym->u.type->size;
     }
     else
     {
@@ -101,7 +107,8 @@ void structType_addSym(Type stype, Sym sym)
         {
             cur = cur->tail;
         }
-        cur->tail = makeFieldList(sym);
+        cur->tail = makeFieldList(sym, stype->size);
+        stype->size += sym->u.type_sym->u.type->size;
     }
 }
 
@@ -231,12 +238,13 @@ void printSym(Sym sym, char *str)
 
     case RD_FUNC:
     {
-        printf("%s(",sym->name);
+        printf("%s(", sym->name);
         FuncType func_type = sym->u.func_type;
-        FuncParam head=func_type->head;
-        while(head){
-            printSym(head->param,", ");
-            head=head->next;
+        FuncParam head = func_type->head;
+        while (head)
+        {
+            printSym(head->param, ", ");
+            head = head->next;
         }
         printf(")");
     }
@@ -276,7 +284,7 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
     }
 
     ret->next = NULL;
-    ret->var_no=0;
+    ret->var_no = 0;
     return ret;
 }
 
@@ -511,18 +519,18 @@ int nameAnalysis(struct ASTNode *root, void *args)
         fillBasicType(sym_float->u.type, RD_FLOAT);
 
         globaltype = makeSymTable();
-        
-        Sym read=makeSym(RD_FUNC, "read");
+
+        Sym read = makeSym(RD_FUNC, "read");
         read->u.func_type->return_type = sym_int;
         read->u.func_type->defined = 1;
         symTable_addSym(globaltype, read);
-        
-        Sym write=makeSym(RD_FUNC, "write");
+
+        Sym write = makeSym(RD_FUNC, "write");
         write->u.func_type->return_type = sym_int;
         write->u.func_type->defined = 1;
-        Sym write_v=makeSym(RD_VARIABLE,"");
-        write_v->u.type_sym=sym_int;
-        write->u.func_type->head=makeFuncParam(write_v);
+        Sym write_v = makeSym(RD_VARIABLE, "");
+        write_v->u.type_sym = sym_int;
+        write->u.func_type->head = makeFuncParam(write_v);
         symTable_addSym(globaltype, write);
 
         global = makeSymTable();
@@ -725,12 +733,14 @@ int nameAnalysis(struct ASTNode *root, void *args)
             cur = global_curDef_sym;
             addArrayType(cur->u.type_sym->u.type, root->children[2]->int_val);
         }
-        if(!isInStruct){
-            Sym head=variables->head;
-            while(head->next){
-                head=head->next;
+        if (!isInStruct)
+        {
+            Sym head = variables->head;
+            while (head->next)
+            {
+                head = head->next;
             }
-            memcpy(head,cur,sizeof(struct Sym_));
+            memcpy(head, cur, sizeof(struct Sym_));
         }
         global_curDef_sym = cur;
     }

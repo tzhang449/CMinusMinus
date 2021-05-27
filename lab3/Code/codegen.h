@@ -39,7 +39,8 @@ struct InterCode
 
         CG_READ,
         CG_WRITE,
-        CG_CALL
+        CG_CALL,
+        CG_ARG
 
     } kind;
     union
@@ -52,38 +53,45 @@ struct InterCode
         {
             Operand result, op1, op2;
         } binop;
-        struct{
-            Operand left,right;
-            char* op;
+        struct
+        {
+            Operand left, right;
+            char *op;
             int label_no;
         } relopgoto;
-        struct{
+        struct
+        {
             Operand place;
-            char* name;
+            char *name;
         } func_call;
-        
+
         Operand ret;
-        
+        Operand arg;
         int var_no;
         int label_no;
         char *name;
     } u;
 };
 
-struct InterCodes{
+struct InterCodes
+{
     struct InterCode code;
-    struct InterCodes* pre;
-    struct InterCodes* next;
-    struct InterCodes* end;
+    struct InterCodes *pre;
+    struct InterCodes *next;
+    struct InterCodes *end;
 };
 
-void print_codes(struct InterCodes* codes, FILE* file);
+void print_codes(struct InterCodes *codes, FILE *file);
 
-struct InterCodes* codeGen(struct ASTNode *root);
-struct InterCodes* codeGen_ExtDefList(struct ASTNode* root);
-struct InterCodes* codeGen_ExtDef(struct ASTNode* root);
-struct InterCodes* codeGen_CompSt(struct ASTNode* root);
-struct InterCodes* codeGen_StmtList(struct ASTNode* root);
-struct InterCodes* codeGen_Stmt(struct ASTNode* root);
-struct InterCodes* codeGen_Exp(struct ASTNode *root, Operand place);
+struct InterCodes *codeGen(struct ASTNode *root);
+struct InterCodes *codeGen_ExtDefList(struct ASTNode *root);
+struct InterCodes *codeGen_ExtDef(struct ASTNode *root);
+struct InterCodes *codeGen_CompSt(struct ASTNode *root);
+struct InterCodes *codeGen_StmtList(struct ASTNode *root);
+struct InterCodes *codeGen_Stmt(struct ASTNode *root);
+struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place);
+struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i);
+struct InterCodes *codeGen_DefList(struct ASTNode *root);
+struct InterCodes *codeGen_DecList(struct ASTNode *root);
+struct InterCodes *codeGen_Dec(struct ASTNode *root);
 #endif
