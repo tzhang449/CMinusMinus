@@ -455,11 +455,13 @@ struct InterCodes *gen_malloc(int var_no, int size)
 
 struct InterCodes *codeGen(struct ASTNode *root)
 {
+    /*
     printf("############################\n");
     symTable_print(globaltype);
     printf("############################\n");
     symTable_print(variables);
     printf("############################\n");
+    */
     zero = new_operand(CG_CONSTANT);
     zero->u.value = 0;
     one = new_operand(CG_CONSTANT);
@@ -1012,11 +1014,6 @@ struct InterCodes *codeGen_Args(struct ASTNode *root, Operand *arg_list, int i)
     {
     case SM_Args_ECA:
     {
-        if (root->children[0]->type == SM_Exp_ELBERB)
-        {
-            //to do!
-            assert(0);
-        }
         Operand place = new_operand(CG_PARAM);
         place->u.var_no = new_tmp();
         struct InterCodes *exp_codes = codeGen_Exp(root->children[0], place);

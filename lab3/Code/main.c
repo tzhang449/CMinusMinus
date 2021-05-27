@@ -35,7 +35,9 @@ int main(int argc, char **argv)
     }
 
     struct InterCodes* codes=codeGen(root);
-    print_codes(codes,stdout);
+    
+    FILE *file_out = fopen(argv[2], "w+");
+    print_codes(codes,file_out);
 
     return 0;
 }
