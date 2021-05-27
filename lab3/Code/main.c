@@ -34,8 +34,8 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    codeGen(root);
-
+    struct InterCodes* codes=codeGen(root);
+    print_codes(codes,stdout);
 
     return 0;
 }

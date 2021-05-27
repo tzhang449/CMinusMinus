@@ -21,12 +21,12 @@ run: parser
 	./parser test.cmm
 	
 gdb: clean debug_compile
-	gdb --args parser tests/2020-B_1.cmm 
+	gdb --args parser test.cmm
 
 debug: clean debug_compile
 	./parser test.cmm
 
-debug_compile: CFLAGS += -g -DDEBUG
+debug_compile: CFLAGS += -g
 debug_compile: parser
 
 parser: clean syntax $(filter-out $(LFO),$(OBJS))

@@ -97,6 +97,7 @@ WHILE while
 
 {RELOP} {
     yylval.Node=newNode("RELOP",SM_OTHERTERM,yylineno);
+    strcpy(yylval.Node->str_val,yytext);
     return RELOP;
 }
 

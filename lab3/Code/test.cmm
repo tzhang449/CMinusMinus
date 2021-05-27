@@ -1,15 +1,11 @@
-struct temp1{
-    int x;
-    float y[1][2][3];
-};
-
-struct temp2{
-    int x;
-    float z[1];
-};
+int foo(){
+    return 1;
+}
 
 int main(){
-    struct temp1 t1;
-    struct temp2 t2;
-    t1 = t2;
+    int n;
+    n = read();
+    read();
+    foo();
+    n=1+2;
 }

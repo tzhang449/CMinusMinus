@@ -520,7 +520,7 @@ int nameAnalysis(struct ASTNode *root, void *args)
         Sym write=makeSym(RD_FUNC, "write");
         write->u.func_type->return_type = sym_int;
         write->u.func_type->defined = 1;
-        Sym write_v=makeSym(RD_VARIABLE,"foo");
+        Sym write_v=makeSym(RD_VARIABLE,"");
         write_v->u.type_sym=sym_int;
         write->u.func_type->head=makeFuncParam(write_v);
         symTable_addSym(globaltype, write);
