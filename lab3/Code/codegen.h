@@ -50,6 +50,7 @@ struct InterCode
         CG_ADDRASSIGN,
         CG_ASSIGN_DEREFER,
         CG_ASSIGN_TOADDR,
+        CG_ASSIGN_BOTHDEREFER,
         CG_MALLOC
     } kind;
     union
@@ -107,4 +108,5 @@ struct InterCodes *codeGen_DefList(struct ASTNode *root);
 struct InterCodes *codeGen_DecList(struct ASTNode *root);
 struct InterCodes *codeGen_Dec(struct ASTNode *root);
 struct InterCodes *codeGen_VarDec(struct ASTNode *root);
+struct InterCodes *gen_arrayAssign(Operand left,Operand right);
 #endif

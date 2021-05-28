@@ -131,6 +131,12 @@ void print_code(struct InterCode code, char *str, FILE *file)
         fprintf(file, " := ");
         print_operand(code.u.assign.right, file);
         break;
+    case CG_ASSIGN_BOTHDEREFER:
+        fprintf(file, "*");
+        print_operand(code.u.assign.left, file);
+        fprintf(file, " := *");
+        print_operand(code.u.assign.right, file);
+        break;
     case CG_MALLOC:
         fprintf(file, "DEC v%d %d", abs(code.u.malloc.var_no), code.u.malloc.size);
         break;
@@ -239,7 +245,7 @@ struct InterCodes *gen_func(char *name)
 
             Sym sym = symTable_find(variables, func_param->param->name, RD_VARIABLE);
             sym->var_no = param_no;
-
+            sym->isparam = 1;
             ret = concat_codes(ret, tmp);
         }
         else
@@ -373,12 +379,6 @@ struct InterCodes *gen_read(Operand place)
 {
     struct InterCodes *ret = new_codes();
     ret->code.kind = CG_READ;
-    if (place == NULL)
-    {
-        place = new_operand(CG_VARIABLE);
-        place->u.var_no = new_tmp();
-        destroy_tmp(place->u.var_no);
-    }
     ret->code.u.func_call.place = place;
     return ret;
 }
@@ -404,19 +404,13 @@ struct InterCodes *gen_call(Operand place, char *name)
     struct InterCodes *ret = new_codes();
     ret->code.kind = CG_CALL;
     ret->code.u.func_call.name = name;
-    if (place == NULL)
-    {
-        place = new_operand(CG_VARIABLE);
-        place->u.var_no = new_tmp();
-        destroy_tmp(place->u.var_no);
-    }
     ret->code.u.func_call.place = place;
     return ret;
 }
 
 struct InterCodes *gen_addrAssign(Operand left, Operand right)
 {
-    assert(left->kind !=CG_VARIABLE && right->kind == CG_VARIABLE);
+    assert(left->kind != CG_VARIABLE && right->kind == CG_VARIABLE);
     struct InterCodes *ret = new_codes();
     ret->code.kind = CG_ADDRASSIGN;
     ret->code.u.assign.left = left;
@@ -450,6 +444,40 @@ struct InterCodes *gen_malloc(int var_no, int size)
     codes->code.kind = CG_MALLOC;
     codes->code.u.malloc.size = size;
     codes->code.u.malloc.var_no = var_no;
+    return codes;
+}
+
+struct InterCodes *gen_assign_bothderefer(Operand a1, Operand a2)
+{
+    struct InterCodes *codes = new_codes();
+    codes->code.kind = CG_ASSIGN_BOTHDEREFER;
+    codes->code.u.assign.left = a1;
+    codes->code.u.assign.right = a2;
+    return codes;
+}
+
+struct InterCodes *gen_arrayAssign(Operand a1, Operand a2)
+{
+    assert(a1->kind == CG_ADDRESS && a2->kind == CG_ADDRESS);
+    int a1_size = a1->u.addr.type_sym->u.type->size, a2_size = a2->u.addr.type_sym->u.type->size;
+    int assign_size = a1_size > a2_size ? a2_size : a1_size;
+    Operand i = new_operand(CG_VARIABLE);
+    i->u.var_no = new_tmp();
+    Operand end = new_operand(CG_CONSTANT);
+    end->u.value = assign_size;
+    struct InterCodes *codes = gen_assign(i, zero);
+    int label1 = new_label();
+    int label2 = new_label();
+    codes = concat_codes(codes, gen_label(label1));
+    codes = concat_codes(codes, gen_relopGoto(i, end, ">=", label2));
+    codes = concat_codes(codes, gen_assign_bothderefer(a1, a2));
+    Operand int_len = new_operand(CG_CONSTANT);
+    int_len->u.value = 4;
+    codes = concat_codes(codes, gen_arith(a1, a1, int_len, CG_ADD));
+    codes = concat_codes(codes, gen_arith(a2, a2, int_len, CG_ADD));
+    codes = concat_codes(codes, gen_arith(i, i, int_len, CG_ADD));
+    codes = concat_codes(codes, gen_goto(label1));
+    codes = concat_codes(codes, gen_label(label2));
     return codes;
 }
 
@@ -681,14 +709,17 @@ struct InterCodes *codeGen_Stmt(struct ASTNode *root)
 
 struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
 {
+    if (!place)
+    {
+        place = new_operand(CG_VARIABLE);
+        place->u.var_no = new_tmp();
+        destroy_tmp(place->u.var_no);
+    }
     switch (root->type)
     {
     case SM_Exp_INT:
     {
-        if (!place)
-        {
-            return NULL;
-        }
+
         if (place->kind != CG_VARIABLE)
         {
             Operand right = new_operand(CG_CONSTANT);
@@ -707,10 +738,6 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
 
     case SM_Exp_ID:
     {
-        if (!place)
-        {
-            return NULL;
-        }
 
         if (place->kind != CG_VARIABLE)
         {
@@ -724,6 +751,8 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
             place->u.addr.type_sym = v->u.type_sym;
             if (v->isparam || v->u.type_sym->u.type->kind == RD_BASIC)
             {
+                if (place->u.var_no == 764)
+                    assert(v->isparam == 0);
                 return gen_assign(place, right);
             }
             else
@@ -749,23 +778,43 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
     {
         if (root->children[0]->type == SM_Exp_ID)
         {
-            Operand left = new_operand(CG_VARIABLE);
+
             Sym v = symTable_find(variables, root->children[0]->children[0]->str_val, RD_VARIABLE);
             if (v->var_no == 0)
                 v->var_no = new_tmp();
-            left->u.var_no = v->var_no;
 
-            Operand right = new_operand(CG_VARIABLE);
-            right->u.var_no = new_tmp();
-            struct InterCodes *right_code = codeGen_Exp(root->children[2], right);
-            struct InterCodes *assign_code = gen_assign(left, right);
-            right_code = concat_codes(right_code, assign_code);
-
-            if (place)
+            if (v->u.type_sym->u.type->kind == RD_ARRAY)
             {
-                right_code = concat_codes(right_code, gen_assign(place, left));
+                Operand array = new_operand(CG_VARIABLE);
+                array->u.var_no = v->var_no;
+                Operand left = new_operand(CG_ADDRESS);
+                left->u.addr.var_no = new_tmp();
+                left->u.addr.type_sym = v->u.type_sym;
+                struct InterCodes *addr_codes = gen_addrAssign(left, array);
+                Operand right = new_operand(CG_ADDRESS);
+                right->u.addr.var_no = new_tmp();
+                struct InterCodes *right_codes = codeGen_Exp(root->children[2], right);
+                struct InterCodes *arrayAssign_codes = gen_arrayAssign(left, right);
+                addr_codes = concat_codes(addr_codes, right_codes);
+                addr_codes = concat_codes(addr_codes, arrayAssign_codes);
+                return addr_codes;
             }
-            return right_code;
+            else
+            {
+                Operand left = new_operand(CG_VARIABLE);
+                left->u.var_no = v->var_no;
+                Operand right = new_operand(CG_VARIABLE);
+                right->u.var_no = new_tmp();
+                struct InterCodes *right_code = codeGen_Exp(root->children[2], right);
+                struct InterCodes *assign_code = gen_assign(left, right);
+                right_code = concat_codes(right_code, assign_code);
+
+                if (place)
+                {
+                    right_code = concat_codes(right_code, gen_assign(place, left));
+                }
+                return right_code;
+            }
         }
         else
         {
@@ -775,9 +824,21 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
             switch (left->u.addr.type_sym->u.type->kind)
             {
             case RD_ARRAY:
+            {
                 //to do
-                assert(0);
-                break;
+                Operand right = new_operand(CG_ADDRESS);
+                right->u.var_no = new_tmp();
+                struct InterCodes *right_codes = codeGen_Exp(root->children[2], right);
+                struct InterCodes *assign_codes = gen_arrayAssign(left, right);
+                left_codes = concat_codes(left_codes, right_codes);
+                left_codes = concat_codes(left_codes, assign_codes);
+                if (place)
+                {
+                    left_codes = concat_codes(left_codes, gen_assignDereference(place, left));
+                }
+                return left_codes;
+            }
+            break;
             case RD_BASIC:
             {
                 Operand right = new_operand(CG_VARIABLE);
@@ -786,6 +847,10 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
                 struct InterCodes *assign_codes = gen_assignToAddr(left, right);
                 left_codes = concat_codes(left_codes, right_codes);
                 left_codes = concat_codes(left_codes, assign_codes);
+                if (place)
+                {
+                    left_codes = concat_codes(left_codes, gen_assignDereference(place, left));
+                }
                 return left_codes;
             }
             break;
@@ -803,8 +868,6 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
     case SM_Exp_STAR:
     case SM_Exp_DIV:
     {
-        if (!place)
-            return NULL;
         Operand left = new_operand(CG_VARIABLE);
         left->u.var_no = new_tmp();
         Operand right = new_operand(CG_VARIABLE);
@@ -838,9 +901,6 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
 
     case SM_Exp_MINUSE:
     {
-        if (!place)
-            return NULL;
-
         Operand right = new_operand(CG_VARIABLE);
         right->u.var_no = new_tmp();
         struct InterCodes *right_codes = codeGen_Exp(root->children[1], right);
@@ -856,8 +916,6 @@ struct InterCodes *codeGen_Exp(struct ASTNode *root, Operand place)
     case SM_Exp_RELOP:
     case SM_Exp_NOTE:
     {
-        if (!place)
-            return NULL;
         int label1 = new_label();
         int label2 = new_label();
         struct InterCodes *zero_codes = gen_assign(place, zero);

@@ -306,6 +306,7 @@ Sym makeSym(enum SYM_ENUM kind, char *name)
 
     ret->next = NULL;
     ret->var_no = 0;
+    ret->isparam=0;
     return ret;
 }
 
@@ -882,7 +883,6 @@ int nameAnalysis(struct ASTNode *root, void *args)
                 FuncType func_type = func_sym->u.func_type;
                 func_type->n_param++;
                 Sym sym=symTable_find(variables,global_curDef_sym->name,RD_VARIABLE);
-                sym->isparam=1;
                 FuncParam param = makeFuncParam(global_curDef_sym);
                 if (!func_type->head)
                 {

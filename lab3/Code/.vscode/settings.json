@@ -3,6 +3,11 @@
         "codegen.h": "c",
         "semantic.h": "c",
         "ast.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "*.tcc": "cpp",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "utility": "c"
     }
 }
